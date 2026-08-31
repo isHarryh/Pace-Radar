@@ -1,6 +1,6 @@
 import {
   BILI_API,
-  BILI_UA,
+  BILI_HEADERS,
   DEFAULT_CONFIG,
   deriveStatus,
   intervalMinutesFor,
@@ -35,17 +35,52 @@ function keysFromNav(nav: NavResponse): WbiKeys {
   return { imgKey: keyOf(img.img_url), subKey: keyOf(img.sub_url), fetchedAt: new Date().toISOString() };
 }
 
+async function enrichCookie(cookie: string): Promise<string> {
+  // 尝试通过 finger/spi 获取与当前出口 IP 绑定的 buvid3/4，失败则回退原 cookie（海外住宅 IP 场景下可降低 412 概率）
+  // 在 Cloudflare Workers 数据中心 IP 下，spi 本身也会 412，此时直接回退
+  try {
+    const r = await fetch(`${BILI_API}/x/frontend/finger/spi`, {
+      headers: { ...BILI_HEADERS, Cookie: cookie },
+    });
+    if (!r.ok) return cookie;
+    const j = (await r.json()) as { code?: number; data?: { b_3?: string; b_4?: string } };
+    if (j.code === 0 && j.data?.b_3) {
+      const extra = `buvid3=${j.data.b_3}; buvid4=${j.data.b_4}`;
+      // 避免重复追加
+      if (cookie.includes('buvid3=')) return cookie;
+      return `${cookie}; ${extra}`;
+    }
+  } catch {}
+  return cookie;
+}
+
 async function biliFetch<T>(path: string, query: string, cookie: string): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${BILI_API}${path}?${query}`, {
-      headers: { 'User-Agent': BILI_UA, Referer: 'https://www.bilibili.com/', Cookie: cookie },
+      headers: { ...BILI_HEADERS, Cookie: cookie },
     });
   } catch {
     throw new RequestError('network', 'unknown', `network error for ${path}`);
   }
-  if (!res.ok) throw new RequestError(String(res.status), 'unknown', `HTTP ${res.status} for ${path}`);
-  return res.json() as Promise<T>;
+  if (!res.ok) {
+    const text = await res.text();
+    if (text.includes('412') || text.includes('412.js') || text.includes('request was banned')) {
+      throw new RequestError('412', path.slice(1) || 'unknown', `412 for ${path}`);
+    }
+    throw new RequestError(String(res.status), 'unknown', `HTTP ${res.status} for ${path}`);
+  }
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text) as T & { code?: number };
+    if ((json as { code?: number }).code === -412) {
+      throw new RequestError('412', path.slice(1) || 'unknown', `412 json for ${path}`);
+    }
+    return json as T;
+  } catch (e) {
+    if (e instanceof RequestError) throw e;
+    throw new RequestError('json', path.slice(1) || 'unknown', `invalid json for ${path}`);
+  }
 }
 
 function fail(endpoint: string, err: unknown): RequestError {
@@ -192,35 +227,56 @@ async function insertSnapshot(
     .run();
 }
 
+const FALLBACK_WBI_KEYS: WbiKeys = {
+  imgKey: '7cd084941338484aae1ad9425b84077c',
+  subKey: '4932caff0ff746eab6f01bf08b70ac45',
+  fetchedAt: new Date(0).toISOString(),
+};
+
 export async function collect(db: D1Database): Promise<void> {
   const config = await loadConfig(db);
   const now = new Date();
+  // 海外非数据中心场景下，spi 指纹可降低 412；在数据中心 412 时自动回退
+  const enrichedCookie = await enrichCookie(config.bilibiliCookie);
 
-  let nav: NavResponse;
+  let nav: NavResponse | null = null;
+  let navError: RequestError | null = null;
   try {
-    nav = await biliFetch<NavResponse>('/x/web-interface/nav', '', config.bilibiliCookie);
+    nav = await biliFetch<NavResponse>('/x/web-interface/nav', '', enrichedCookie);
   } catch (err) {
-    const e = fail('nav', err);
-    await insertSnapshot(db, GLOBAL_ACCOUNT, e.endpoint, e.statusCode);
-    return;
+    navError = fail('nav', err);
+    await insertSnapshot(db, GLOBAL_ACCOUNT, navError.endpoint, navError.statusCode);
   }
-  if (nav.code === -101) {
+  if (nav?.code === -101) {
     await insertSnapshot(db, GLOBAL_ACCOUNT, 'nav', '-101');
     console.log('[collector] cookie expired (nav -101), skip this round');
     return;
   }
 
   let wbiKeys = config.wbiKeys;
-  if (!wbiKeys || Date.now() - Date.parse(wbiKeys.fetchedAt) > WBI_REFRESH_MS) {
-    wbiKeys = keysFromNav(nav);
-    await saveWbiKeys(db, wbiKeys);
+  const needsRefresh = !wbiKeys || Date.now() - Date.parse(wbiKeys.fetchedAt) > WBI_REFRESH_MS;
+  if (needsRefresh) {
+    if (nav?.data?.wbi_img) {
+      wbiKeys = keysFromNav(nav);
+      await saveWbiKeys(db, wbiKeys);
+    } else if (wbiKeys) {
+      // nav 412/network but have cached keys, continue with stale
+      console.log(`[collector] nav unavailable (${navError?.statusCode ?? 'no wbi_img'}), reuse cached wbiKeys`);
+    } else {
+      wbiKeys = FALLBACK_WBI_KEYS;
+      console.log('[collector] nav unavailable and no cached keys, use fallback wbiKeys');
+    }
+  }
+  if (!wbiKeys) {
+    console.log('[collector] no wbiKeys available, skip this round');
+    return;
   }
 
   const accounts = await listEnabledAccounts(db);
   for (const account of accounts) {
     try {
       if (!(await shouldCollectAccount(db, account, config, now))) continue;
-      const stat = await collectAccount(account, config.bilibiliCookie, wbiKeys);
+      const stat = await collectAccount(account, enrichedCookie, wbiKeys);
       await insertSnapshot(db, account.id, stat.endpoint, 'ok', stat);
     } catch (err) {
       const e = err instanceof RequestError ? err : fail('unknown', err);
