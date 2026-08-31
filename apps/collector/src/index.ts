@@ -5,7 +5,12 @@ export interface Env {
 }
 
 export default {
-  async fetch(_req: Request, _env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    const url = new URL(req.url);
+    if (url.pathname === '/collect' || url.pathname === '/cdn-cgi/handler/scheduled') {
+      await collect(env.DB);
+      return new Response('collected', { headers: { 'Content-Type': 'text/plain' } });
+    }
     return new Response('ok', { headers: { 'Content-Type': 'text/plain' } });
   },
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
