@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #00a1d6;
+  --color-brand-hover: #00b3e5;
+  --color-ink: #18191c;
+  --color-muted: #9499a0;
+  --color-line: #e5e8ec;
+  --color-bg: #f6f8fa;
+  --color-watch: #f6be00;
+  --color-danger: #fa4b4b;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  @apply bg-bg text-ink antialiased;
+  overscroll-behavior-y: contain;
+}
+
+/* 移动端触摸与滚动统一 */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (max-width: 640px) {
+  button,
+  a {
+    touch-action: manipulation;
+  }
+}
+
+/* 表格/图表横滑时隐藏滚动条但保留手势 */
+.overscroll-x-contain {
+  -webkit-overflow-scrolling: touch;
+}
