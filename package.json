@@ -1,0 +1,19 @@
+{
+  "name": "pace-radar",
+  "private": true,
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "dev:web": "pnpm --filter @pace-radar/web dev",
+    "dev:api": "pnpm --filter @pace-radar/api dev",
+    "dev:collector": "pnpm --filter @pace-radar/collector dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "wrangler": "^4.0.0"
+  }
+}
