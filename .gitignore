@@ -1,0 +1,14 @@
+# Logs
+logs/
+*.log
+
+# Generated directories
+node_modules/
+dist/
+.wrangler/
+
+# Editor and file system
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.DS_Store
