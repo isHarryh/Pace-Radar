@@ -49,8 +49,6 @@ export interface TargetView {
 
 export interface SeriesPoint {
   t: string;
-  commentCount: number;
-  ratio: number;
   growth: number;
 }
 

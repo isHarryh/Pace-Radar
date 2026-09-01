@@ -23,7 +23,7 @@ export const btnSmall = 'inline-flex h-8 items-center justify-center rounded-md 
 export const btnSmallDanger = 'inline-flex h-8 items-center justify-center rounded-md bg-white px-2.5 text-xs font-medium text-muted ring-1 ring-line transition hover:bg-bg hover:text-danger disabled:cursor-not-allowed disabled:opacity-40';
 export const fieldLabel = 'flex flex-col gap-1.5 text-xs font-medium text-ink';
 export const errorMessage = 'rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger';
-export const badgeBase = 'inline-flex rounded-md px-2 py-1 text-xs font-medium';
+export const badgeBase = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium leading-none';
 export const badgeTone = {
   brand: 'bg-brand/10 text-brand',
   watch: 'bg-watch/10 text-watch',

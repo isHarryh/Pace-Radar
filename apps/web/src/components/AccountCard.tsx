@@ -4,6 +4,7 @@ import { formatCount } from '../format';
 import { useECharts } from '../useECharts';
 import { Avatar } from './Avatar';
 import { StatusBadge } from './StatusBadge';
+import { badgeBase, badgeTone } from './ui';
 
 function buildSparkOption(points: { t: string; growth: number }[]): EChartsOption {
   return {
@@ -55,7 +56,7 @@ export function AccountCard({ account }: { account: AccountView }) {
         </div>
         <div className="flex items-center gap-1.5">
           {account.activeCount > 0 && (
-            <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">{account.activeCount} 活跃</span>
+            <span className={`${badgeBase} ${badgeTone.brand}`}>{account.activeCount} 活跃</span>
           )}
           <StatusBadge status={account.status} />
         </div>

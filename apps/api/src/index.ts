@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { deriveStatus, parseDbTime, type PaceStatus } from '@pace-radar/shared';
 import { admin } from './admin';
 import {
+  fallbackLatestStats,
   getAccountByMid,
   getActiveTargetIds,
   getActiveTargetsBatch,
@@ -152,6 +153,16 @@ async function buildAggregatedAccountView(
 ): Promise<AccountView> {
   const activeIds = prefetchedActiveIds ?? (await getActiveTargetIds(db, account.id, account.threshold));
   if (activeIds.length === 0) {
+    const fallback = await fallbackLatestStats(db, account.id);
+    const latestView = fallback.latest
+      ? {
+          commentCount: fallback.latest.comment_count,
+          likeCount: fallback.latest.like_count,
+          shareCount: fallback.latest.share_count,
+          ratio: fallback.latest.ratio_c_l,
+          updatedAt: fallback.latest.updated_at,
+        }
+      : null;
     return {
       id: account.id,
       mid: account.mid,
@@ -159,10 +170,10 @@ async function buildAggregatedAccountView(
       threshold: account.threshold,
       status: 'normal',
       activeCount: 0,
-      maxComment: null,
-      maxRatio: null,
+      maxComment: fallback.maxComment,
+      maxRatio: fallback.maxRatio,
       totalGrowth: null,
-      latest: null,
+      latest: latestView,
       perMinute: null,
     };
   }
@@ -339,23 +350,14 @@ app.get('/api/accounts/:mid/series', async (c) => {
   return handleAccountRoute(c, async (account) => {
     const activeIds = await getActiveTargetIds((c as unknown as { env: Env }).env.DB, account.id, account.threshold);
     if (activeIds.length === 0) {
-      return { range: params.range, resolution: params.resolution, series: [] as { targetId: string; url: string; points: { t: string; commentCount: number; ratio: number; growth: number }[] }[] };
+      return { range: params.range, resolution: params.resolution, series: [] as { targetId: string; url: string; points: { t: string; growth: number }[] }[] };
     }
     const seriesMap = await seriesByTargets((c as unknown as { env: Env }).env.DB, account.id, activeIds, params.bucket, params.offset);
-    const series = activeIds.map((tid) => {
-      const points = seriesMap.get(tid) ?? [];
-      const growthPoints = toGrowthPoints(points);
-      return {
-        targetId: tid,
-        url: targetUrl(tid),
-        points: points.map((p, i) => ({
-          t: p.updated_at,
-          commentCount: p.comment_count,
-          ratio: p.ratio_c_l,
-          growth: growthPoints[i]!.growth,
-        })),
-      };
-    });
+    const series = activeIds.map((tid) => ({
+      targetId: tid,
+      url: targetUrl(tid),
+      points: toGrowthPoints(seriesMap.get(tid) ?? []),
+    }));
     return { range: params.range, resolution: params.resolution, series };
   });
 });

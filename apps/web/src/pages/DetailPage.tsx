@@ -2,24 +2,16 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { EChartsOption } from 'echarts';
 import type { CallbackDataParams } from 'echarts/types/dist/shared';
-import { fetchAccount, fetchSeries, fetchTargets, type SeriesGroup, type SeriesPoint, type TargetView } from '../api';
+import { fetchAccount, fetchSeries, fetchTargets, type SeriesGroup, type TargetView } from '../api';
 import { Avatar } from '../components/Avatar';
 import { Header } from '../components/Header';
 import { RefreshControl, useRefresh } from '../components/RefreshControl';
 import { StatusBadge } from '../components/StatusBadge';
-import { pageShell, tabClass } from '../components/ui';
+import { badgeBase, badgeTone, pageShell, tabClass } from '../components/ui';
 import { formatClock, formatCountWan, formatDateTime } from '../format';
 import { useECharts } from '../useECharts';
 
-type Metric = 'comments' | 'growth' | 'ratio';
 type Range = '24h' | '7d';
-type TooltipParams = CallbackDataParams | CallbackDataParams[];
-
-const METRIC_META: Record<Metric, { label: string; pick: (p: SeriesPoint) => number }> = {
-  comments: { label: '评论数', pick: (p) => p.commentCount },
-  growth: { label: '评论增速', pick: (p) => p.growth },
-  ratio: { label: '评赞比', pick: (p) => p.ratio },
-};
 
 const PALETTE = ['#00a1d6', '#f59e0b', '#fa4b4b', '#10b981', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#84cc16'];
 
@@ -33,13 +25,7 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
 }
 
-function formatMetricValue(value: unknown, metric: Metric): string {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return metric === 'comments' ? formatCountWan(number) : number.toFixed(3);
-}
-
-function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): EChartsOption {
+function buildMultiOption(groups: SeriesGroup[], range: Range): EChartsOption {
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   if (groups.length === 0) {
     return {
@@ -49,7 +35,6 @@ function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): 
       series: [],
     };
   }
-  // Union of all timestamps
   const timeSet = new Set<string>();
   for (const g of groups) for (const p of g.points) timeSet.add(p.t);
   const times = Array.from(timeSet).sort();
@@ -61,7 +46,7 @@ function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): 
     const pointMap = new Map(g.points.map((p) => [p.t, p] as const));
     for (const t of times) {
       const p = pointMap.get(t);
-      if (p) data[timeIndex.get(t)!] = METRIC_META[metric].pick(p);
+      if (p) data[timeIndex.get(t)!] = p.growth;
     }
     return {
       type: 'line' as const,
@@ -76,7 +61,7 @@ function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): 
   });
 
   return {
-    grid: { left: isMobile ? 44 : 56, right: 12, top: 16, bottom: 32 },
+    grid: { left: isMobile ? 44 : 56, right: 12, top: 36, bottom: 28 },
     tooltip: {
       trigger: 'axis',
       confine: true,
@@ -88,17 +73,27 @@ function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): 
         const time = times[idx] ? formatDateTime(times[idx]!) : first?.name ?? '';
         const lines = items.map((item) => {
           const marker = typeof item.marker === 'string' ? item.marker : '';
-          const val = item.value;
-          return `${marker}${item.seriesName}: ${formatMetricValue(val, metric)}`;
+          const v = Number(item.value);
+          const text = Number.isFinite(v) ? `${v.toFixed(1)}/分` : '—';
+          return `${marker}${item.seriesName}: ${text}`;
         });
         return [time, ...lines].join('<br/>');
       },
     },
     legend: {
       type: 'scroll',
-      bottom: 0,
+      top: 0,
+      left: 'center',
+      right: 12,
+      itemGap: 14,
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      pageIconColor: '#c2c6cc',
+      pageIconInactiveColor: '#e5e8ec',
+      pageTextStyle: { color: '#9499a0', fontSize: 10 },
       data: groups.map((g) => shortId(g.targetId)),
-      textStyle: { fontSize: 10, color: '#9499a0' },
+      textStyle: { fontSize: 10, color: '#606770' },
     },
     xAxis: {
       type: 'category',
@@ -119,11 +114,12 @@ function buildMultiOption(groups: SeriesGroup[], metric: Metric, range: Range): 
     },
     yAxis: {
       type: 'value',
+      name: '条/分',
+      nameTextStyle: { color: '#9499a0', fontSize: 10 },
       splitLine: { lineStyle: { color: '#eef1f4' } },
       axisLabel: {
         color: '#9499a0',
         fontSize: isMobile ? 10 : 12,
-        formatter: metric === 'comments' ? (value: number) => formatCountWan(Number(value)) : undefined,
       },
     },
     series,
@@ -149,10 +145,10 @@ function TargetTable({ targets }: { targets: TargetView[] }) {
         <thead>
           <tr className="border-b border-line text-xs text-muted">
             <th className="px-2 py-2 font-medium">动态</th>
-            <th className="px-2 py-2 font-medium text-right">楼层</th>
-            <th className="px-2 py-2 font-medium text-right">点赞</th>
+            <th className="px-2 py-2 font-medium text-right">评论数</th>
+            <th className="px-2 py-2 font-medium text-right">评论增速</th>
+            <th className="px-2 py-2 font-medium text-right">点赞数</th>
             <th className="px-2 py-2 font-medium text-right">评赞比</th>
-            <th className="px-2 py-2 font-medium text-right">增速</th>
             <th className="px-2 py-2 font-medium text-right">状态</th>
             <th className="px-2 py-2 font-medium text-right">跳转</th>
           </tr>
@@ -167,9 +163,9 @@ function TargetTable({ targets }: { targets: TargetView[] }) {
                 </span>
               </td>
               <td className="px-2 py-2 text-right font-medium text-ink">{formatCountWan(t.commentCount)}</td>
+              <td className="px-2 py-2 text-right text-ink">{t.perMinute ? `${t.perMinute.comments.toFixed(1)}/分` : '—'}</td>
               <td className="px-2 py-2 text-right text-ink">{formatCountWan(t.likeCount)}</td>
               <td className="px-2 py-2 text-right text-ink">{t.ratio.toFixed(2)}</td>
-              <td className="px-2 py-2 text-right text-ink">{t.perMinute ? `${t.perMinute.comments.toFixed(1)}/分` : '—'}</td>
               <td className="px-2 py-2 text-right">
                 <StatusBadge status={t.status} />
               </td>
@@ -194,7 +190,6 @@ function TargetTable({ targets }: { targets: TargetView[] }) {
 export function DetailPage({ mid }: { mid: number }) {
   const { intervalMs } = useRefresh();
   const [range, setRange] = useState<Range>('24h');
-  const [metric, setMetric] = useState<Metric>('comments');
   const resolution = range === '7d' ? '1h' : '5m';
 
   const account = useQuery({
@@ -218,7 +213,7 @@ export function DetailPage({ mid }: { mid: number }) {
   });
 
   const groups = series.data?.series ?? [];
-  const chartOption = useMemo(() => buildMultiOption(groups, metric, range), [groups, metric, range]);
+  const chartOption = useMemo(() => buildMultiOption(groups, range), [groups, range]);
   const chartRef = useECharts(chartOption);
   const view = account.data;
 
@@ -237,7 +232,7 @@ export function DetailPage({ mid }: { mid: number }) {
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-ink sm:text-xl">{view?.name ?? '加载中…'}</h1>
           {view && <span className="shrink-0"><StatusBadge status={view.status} /></span>}
           {view?.activeCount !== undefined && view.activeCount > 0 && (
-            <span className="shrink-0 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">{view.activeCount} 活跃</span>
+            <span className={`shrink-0 ${badgeBase} ${badgeTone.brand}`}>{view.activeCount} 活跃</span>
           )}
         </div>
 
@@ -248,15 +243,9 @@ export function DetailPage({ mid }: { mid: number }) {
         </div>
 
         <div className="mt-4 rounded-lg border border-line bg-white p-3 shadow-sm sm:p-4">
-          <div className="-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
+          <div className="flex items-center justify-between gap-3 pb-3">
+            <h2 className="text-sm font-semibold text-ink">评论增速变化</h2>
             <div className="flex shrink-0 gap-1.5 sm:gap-2">
-              {(Object.keys(METRIC_META) as Metric[]).map((m) => (
-                <button type="button" key={m} onClick={() => setMetric(m)} aria-pressed={metric === m} className={tabClass(metric === m)}>
-                  {METRIC_META[m].label}
-                </button>
-              ))}
-            </div>
-            <div className="ml-auto flex shrink-0 gap-1.5 pl-2 sm:gap-2 sm:pl-0">
               {(['24h', '7d'] as Range[]).map((r) => (
                 <button type="button" key={r} onClick={() => setRange(r)} aria-pressed={range === r} className={tabClass(range === r)}>
                   {r === '24h' ? '24小时' : '7天'}

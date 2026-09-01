@@ -31,8 +31,6 @@ export interface RequestLogRow {
 export interface SeriesPoint {
   updated_at: string;
   comment_count: number;
-  like_count: number;
-  ratio_c_l: number;
 }
 
 function placeholders<T>(ids: T[]): string {
@@ -108,8 +106,8 @@ export async function series(
   const tid = targetId ?? (await currentTargetId(db, accountId));
   const where = tid ? 'AND target_id = ?' : '';
   const params = tid ? [bucketSeconds, accountId, tid, offset] : [bucketSeconds, accountId, offset];
-  const sql = `SELECT comment_count, like_count, ratio_c_l, updated_at FROM (
-      SELECT comment_count, like_count, ratio_c_l, updated_at,
+  const sql = `SELECT comment_count, updated_at FROM (
+      SELECT comment_count, updated_at,
         ROW_NUMBER() OVER (PARTITION BY CAST(CAST(strftime('%s', updated_at) AS INTEGER) / ? AS INTEGER) ORDER BY updated_at DESC, id DESC) AS rn
       FROM snapshots WHERE account_id = ? ${where} AND status_code = 'ok' AND updated_at >= datetime('now', ?)
     ) WHERE rn = 1 ORDER BY updated_at`;
@@ -230,8 +228,8 @@ export async function seriesByTargets(
   const map = initMap(targetIds, () => [] as SeriesPoint[]);
   if (targetIds.length === 0) return map;
   const ph = placeholders(targetIds);
-  const sql = `SELECT target_id, comment_count, like_count, ratio_c_l, updated_at FROM (
-      SELECT target_id, comment_count, like_count, ratio_c_l, updated_at,
+  const sql = `SELECT target_id, comment_count, updated_at FROM (
+      SELECT target_id, comment_count, updated_at,
              ROW_NUMBER() OVER (PARTITION BY target_id, CAST(CAST(strftime('%s', updated_at) AS INTEGER) / ? AS INTEGER) ORDER BY updated_at DESC, id DESC) AS rn
       FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id IN (${ph}) AND updated_at >= datetime('now', ?)
     ) WHERE rn = 1 ORDER BY target_id ASC, updated_at ASC`;
@@ -244,6 +242,30 @@ export async function seriesByTargets(
     map.get(target_id)!.push(pt);
   }
   return map;
+}
+
+export async function fallbackLatestStats(
+  db: D1Database,
+  accountId: number,
+): Promise<{ maxComment: number | null; maxRatio: number | null; latest: SnapshotRow | null }> {
+  const sql = `SELECT comment_count, like_count, share_count, ratio_c_l, updated_at FROM (
+      SELECT comment_count, like_count, share_count, ratio_c_l, updated_at,
+             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
+      FROM snapshots WHERE account_id = ? AND status_code = 'ok'
+    ) WHERE rn = 1`;
+  const { results } = await db.prepare(sql).bind(accountId).all<SnapshotRow>();
+  if (results.length === 0) return { maxComment: null, maxRatio: null, latest: null };
+  let maxComment: number | null = null;
+  let maxRatio: number | null = null;
+  let latest: SnapshotRow | null = null;
+  for (const r of results) {
+    if (maxComment === null || r.comment_count > maxComment) maxComment = r.comment_count;
+    if (maxRatio === null || r.ratio_c_l > maxRatio) maxRatio = r.ratio_c_l;
+    if (!latest || r.updated_at > latest.updated_at) latest = r;
+    // tie-breaker for latest if same timestamp but higher comment
+    if (latest && r.updated_at === latest.updated_at && r.comment_count > latest.comment_count) latest = r;
+  }
+  return { maxComment, maxRatio, latest };
 }
 
 
