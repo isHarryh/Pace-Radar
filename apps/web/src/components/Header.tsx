@@ -1,4 +1,6 @@
-export function Header({ back }: { back?: boolean }) {
+import type { ReactNode } from 'react';
+
+export function Header({ back, children }: { back?: boolean; children?: ReactNode }) {
   return (
     <header className="app-header">
       <div className="app-header-inner">
@@ -7,6 +9,7 @@ export function Header({ back }: { back?: boolean }) {
         </a>
         <span className="app-brand-subtitle">Pace Radar</span>
         <div className="ml-auto flex items-center gap-1 sm:gap-4">
+          {children}
           {back && (
             <a href="#/" className="app-back-link">
               <span className="sm:hidden">← 返回</span>

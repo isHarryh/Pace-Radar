@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAdminConfig, updateAdminConfig } from '../../api';
+import { useRefresh } from '../RefreshControl';
 
 import { btnPrimary, errorMessage, fieldLabel, inputBase, surface, surfaceBody, surfaceFooter, surfaceHeader } from '../ui';
 const inputCls = `${inputBase} w-24`;
 
 export function ConfigSection() {
   const queryClient = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-config'], queryFn: fetchAdminConfig, refetchInterval: 30_000 });
+  const { intervalMs } = useRefresh();
+  const { data } = useQuery({ queryKey: ['admin-config'], queryFn: fetchAdminConfig, refetchInterval: intervalMs });
   const [collect, setCollect] = useState('');
   const [active, setActive] = useState('');
   const [busy, setBusy] = useState(false);

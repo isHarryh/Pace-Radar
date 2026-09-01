@@ -6,19 +6,24 @@ import { AccountsSection } from '../components/admin/AccountsSection';
 import { ConfigSection } from '../components/admin/ConfigSection';
 import { CookieSection } from '../components/admin/CookieSection';
 import { RequestLogsTable } from '../components/admin/LogsSection';
+import { RefreshControl, useRefresh } from '../components/RefreshControl';
 import { surface, surfaceContent, tabClass } from '../components/ui';
 
 export function AdminPage() {
+  const { intervalMs } = useRefresh();
   const [tab, setTab] = useState<'manage' | 'logs'>('manage');
   const { data: logs } = useQuery({
     queryKey: ['admin-logs'],
     queryFn: () => fetchAdminLogs(50),
-    refetchInterval: 10_000,
+    enabled: tab === 'logs',
+    refetchInterval: intervalMs,
   });
 
   return (
     <>
-      <Header back />
+      <Header back>
+        <RefreshControl />
+      </Header>
       <main className="page-shell">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-semibold text-ink sm:text-xl">管理后台</h1>
@@ -40,7 +45,7 @@ export function AdminPage() {
           </div>
         ) : (
           <div className={`${surface} ${surfaceContent}`}>
-            <h2 className="mb-3 text-sm font-medium text-ink sm:text-[15px]">最近请求（每 10 秒刷新）</h2>
+            <h2 className="mb-3 text-sm font-medium text-ink sm:text-[15px]">最近请求</h2>
             <RequestLogsTable logs={logs ?? []} />
           </div>
         )}

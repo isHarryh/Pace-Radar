@@ -7,6 +7,7 @@ import {
   type AdminAccount,
 } from '../../api';
 import { AvatarUpload } from '../AvatarUpload';
+import { useRefresh } from '../RefreshControl';
 
 import { btnPrimary, btnPrimarySm, errorMessage, fieldLabel, inputBase, surface, surfaceFormFooter, surfaceHeader } from '../ui';
 
@@ -77,10 +78,11 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
 
 export function AccountsSection() {
   const queryClient = useQueryClient();
+  const { intervalMs } = useRefresh();
   const { data: accounts } = useQuery({
     queryKey: ['admin-accounts'],
     queryFn: fetchAdminAccounts,
-    refetchInterval: 30_000,
+    refetchInterval: intervalMs,
   });
   const [newMid, setNewMid] = useState('');
   const [newName, setNewName] = useState('');

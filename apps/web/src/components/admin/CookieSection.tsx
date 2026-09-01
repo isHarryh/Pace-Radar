@@ -3,12 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchAdminCookie, updateAdminCookie } from '../../api';
 import { formatClock } from '../../format';
 import { StatusCodeBadge } from './LogsSection';
+import { useRefresh } from '../RefreshControl';
 
 import { btnGhost, btnPrimary, errorMessage, fieldLabel, inputBase, surface, surfaceBody, surfaceFooter, surfaceHeader } from '../ui';
 
 export function CookieSection() {
   const queryClient = useQueryClient();
-  const { data } = useQuery({ queryKey: ['admin-cookie'], queryFn: fetchAdminCookie, refetchInterval: 60_000 });
+  const { intervalMs } = useRefresh();
+  const { data } = useQuery({ queryKey: ['admin-cookie'], queryFn: fetchAdminCookie, refetchInterval: intervalMs });
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

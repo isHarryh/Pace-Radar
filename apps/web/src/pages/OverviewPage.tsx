@@ -2,17 +2,21 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchAccounts } from '../api';
 import { AccountCard } from '../components/AccountCard';
 import { Header } from '../components/Header';
+import { RefreshControl, useRefresh } from '../components/RefreshControl';
 
 export function OverviewPage() {
+  const { intervalMs } = useRefresh();
   const { data, isLoading, isError } = useQuery({
     queryKey: ['accounts'],
     queryFn: fetchAccounts,
-    refetchInterval: 30_000,
+    refetchInterval: intervalMs,
   });
 
   return (
     <>
-      <Header />
+      <Header>
+        <RefreshControl />
+      </Header>
       <main className="page-shell">
         {isLoading && <p className="py-16 text-center text-sm text-muted">加载中…</p>}
         {isError && <p className="py-16 text-center text-sm text-muted">数据加载失败，请稍后刷新重试</p>}

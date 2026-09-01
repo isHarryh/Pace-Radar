@@ -4,6 +4,7 @@ import type { EChartsOption } from 'echarts';
 import { fetchAccount, fetchSeries, type SeriesPoint } from '../api';
 import { Avatar } from '../components/Avatar';
 import { Header } from '../components/Header';
+import { RefreshControl, useRefresh } from '../components/RefreshControl';
 import { StatusBadge } from '../components/StatusBadge';
 import { tabClass } from '../components/ui';
 import { formatClock, formatCountWan } from '../format';
@@ -78,6 +79,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 export function DetailPage({ mid }: { mid: number }) {
+  const { intervalMs } = useRefresh();
   const [range, setRange] = useState<Range>('24h');
   const [metric, setMetric] = useState<Metric>('comments');
   const resolution = range === '7d' ? '1h' : '5m';
@@ -85,12 +87,12 @@ export function DetailPage({ mid }: { mid: number }) {
   const account = useQuery({
     queryKey: ['account', mid],
     queryFn: () => fetchAccount(mid),
-    refetchInterval: 15_000,
+    refetchInterval: intervalMs,
   });
   const series = useQuery({
     queryKey: ['series', mid, range],
     queryFn: () => fetchSeries(mid, range, resolution),
-    refetchInterval: 15_000,
+    refetchInterval: intervalMs,
   });
 
   const chartRef = useECharts(buildMainOption(series.data?.points ?? [], metric));
@@ -98,7 +100,9 @@ export function DetailPage({ mid }: { mid: number }) {
 
   return (
     <>
-      <Header back />
+      <Header back>
+        <RefreshControl />
+      </Header>
       <main className="page-shell">
         <div className="flex items-center gap-2.5 sm:gap-3">
           <Avatar accountId={mid} name={view?.name} size={36} className="sm:!h-10 sm:!w-10" />
