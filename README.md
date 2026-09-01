@@ -75,7 +75,7 @@ pnpm exec wrangler d1 execute pace-radar-db --remote --config apps/collector/wra
 # 构建命令
 pnpm install --frozen-lockfile && pnpm --filter @pace-radar/shared build && pnpm --filter @pace-radar/collector-core build
 # 部署命令
-pnpm exec wrangler deploy --config apps/collector/wrangler.toml
+pnpm deploy:cf:collector
 ```
 
 部署成功后到 Worker 的 **Bindings** 页面确保存在名为 `DB` 的绑定（指向我们的 D1 数据库），随后前往设置页面的 **Cron Triggers** 检查每分钟的调度记录。
@@ -86,7 +86,7 @@ pnpm exec wrangler deploy --config apps/collector/wrangler.toml
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter @pace-radar/collector-node build
+pnpm build:collector-node
 ```
 
 Linux 采集器通过 Cloudflare D1 HTTP API 访问同一份数据库，因此需要在 Cloudflare 控制台的 **My Profile -> API Tokens** 中创建一个自定义 API Token，只授予当前账号的 **Account -> D1 -> Edit** 权限。然后在服务器的环境文件中填写这个 Token、Cloudflare Account ID 和 D1 Database ID：
@@ -122,7 +122,7 @@ API 服务使用 Cloudflare Worker 部署。回到 Cloudflare 控制台，新建
 # 构建命令
 pnpm install --frozen-lockfile && pnpm --filter @pace-radar/shared build
 # 部署命令
-pnpm exec wrangler deploy --config apps/api/wrangler.toml
+pnpm deploy:cf:api
 ```
 
 部署完成后，在 Worker 详情页复制它的 `workers.dev` 地址，并在浏览器访问 `https://<你的-api-worker>.workers.dev/api/health` 确认 API 正常运行：
