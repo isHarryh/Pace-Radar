@@ -15,9 +15,7 @@ async function timingSafeEqual(a: string, b: string): Promise<boolean> {
 }
 
 async function loadAdminToken(db: D1Database): Promise<string | null> {
-  const row = await db
-    .prepare("SELECT value FROM app_config WHERE key = 'admin_token'")
-    .first<{ value: string }>();
+  const row = await db.prepare("SELECT value FROM app_config WHERE key = 'admin_token'").first<{ value: string }>();
   return row?.value ?? null;
 }
 
@@ -25,30 +23,27 @@ function unauthorized(c: Context, message: string) {
   return c.json({ error: { code: 'unauthorized', message } }, 401, { 'Cache-Control': 'no-store' });
 }
 
+function badRequest(c: Context, message: string) {
+  return c.json({ error: { code: 'bad_request', message } }, 400);
+}
+
+function notFound(c: Context, message: string) {
+  return c.json({ error: { code: 'not_found', message } }, 404);
+}
+
 async function loadConfig(db: D1Database): Promise<PaceConfig> {
   const { results } = await db.prepare('SELECT key, value FROM app_config').all<{ key: string; value: string }>();
   const config: PaceConfig = { ...DEFAULT_CONFIG };
-  for (const row of results) {
-    switch (row.key) {
-      case 'collect_interval_minutes':
-        config.collectIntervalMinutes = Number(row.value);
-        break;
-      case 'active_interval_minutes':
-        config.activeIntervalMinutes = Number(row.value);
-        break;
-      case 'bilibili_cookie':
-        config.bilibiliCookie = row.value;
-        break;
-    }
+  for (const { key, value } of results) {
+    if (key === 'collect_interval_minutes') config.collectIntervalMinutes = Number(value);
+    else if (key === 'active_interval_minutes') config.activeIntervalMinutes = Number(value);
+    else if (key === 'bilibili_cookie') config.bilibiliCookie = value;
   }
   return config;
 }
 
 async function setConfigValue(db: D1Database, key: string, value: string): Promise<void> {
-  await db
-    .prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)')
-    .bind(key, value)
-    .run();
+  await db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').bind(key, value).run();
 }
 
 async function checkCookieValidity(cookie: string): Promise<boolean | null> {
@@ -67,19 +62,14 @@ async function checkCookieValidity(cookie: string): Promise<boolean | null> {
 
 export const admin = new Hono<{ Bindings: { DB: D1Database } }>();
 
-// Prevent any admin response from being cached at edge or browser.
-admin.use('*', async (c, next) => {
-  await next();
-  c.header('Cache-Control', 'no-store');
-  c.header('CDN-Cache-Control', 'no-store');
-});
-
 admin.use('*', async (c, next) => {
   const expected = await loadAdminToken(c.env.DB);
   const token = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   if (!expected) return unauthorized(c, 'admin token not configured');
   if (!(await timingSafeEqual(token, expected))) return unauthorized(c, 'invalid token');
-  return next();
+  await next();
+  c.header('Cache-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
 });
 
 admin.get('/accounts', async (c) => {
@@ -92,7 +82,7 @@ admin.get('/accounts', async (c) => {
 admin.post('/accounts', async (c) => {
   const body = await c.req.json<{ mid: number; name: string; threshold?: number; enabled?: boolean }>();
   if (!Number.isInteger(body.mid) || body.mid <= 0 || !body.name?.trim()) {
-    return c.json({ error: { code: 'bad_request', message: 'mid and name are required' } }, 400);
+    return badRequest(c, 'mid and name are required');
   }
   try {
     const result = await c.env.DB.prepare(
@@ -113,13 +103,13 @@ admin.put('/accounts/:mid', async (c) => {
   const sets: string[] = [];
   const values: (string | number)[] = [];
   if (body.name !== undefined) {
-    if (!body.name.trim()) return c.json({ error: { code: 'bad_request', message: 'name cannot be empty' } }, 400);
+    if (!body.name.trim()) return badRequest(c, 'name cannot be empty');
     sets.push('name = ?');
     values.push(body.name.trim());
   }
   if (body.threshold !== undefined) {
     if (!Number.isFinite(body.threshold) || body.threshold <= 0) {
-      return c.json({ error: { code: 'bad_request', message: 'threshold must be positive' } }, 400);
+      return badRequest(c, 'threshold must be positive');
     }
     sets.push('threshold = ?');
     values.push(body.threshold);
@@ -128,12 +118,10 @@ admin.put('/accounts/:mid', async (c) => {
     sets.push('enabled = ?');
     values.push(body.enabled ? 1 : 0);
   }
-  if (sets.length === 0) return c.json({ error: { code: 'bad_request', message: 'nothing to update' } }, 400);
+  if (sets.length === 0) return badRequest(c, 'nothing to update');
   values.push(mid);
-  const result = await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(', ')} WHERE mid = ?`)
-    .bind(...values)
-    .run();
-  if (result.meta.changes === 0) return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404);
+  const result = await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(', ')} WHERE mid = ?`).bind(...values).run();
+  if (result.meta.changes === 0) return notFound(c, 'account not found');
   return c.json({ data: { ok: true } });
 });
 
@@ -146,18 +134,16 @@ admin.post('/accounts/:mid/avatar', async (c) => {
     try {
       bytes = Uint8Array.from(atob(body.avatar), (ch) => ch.charCodeAt(0));
     } catch {
-      return c.json({ error: { code: 'bad_request', message: 'invalid base64' } }, 400);
+      return badRequest(c, 'invalid base64');
     }
-    if (bytes.length > AVATAR_MAX_BYTES) {
-      return c.json({ error: { code: 'bad_request', message: 'avatar too large' } }, 400);
-    }
+    if (bytes.length > AVATAR_MAX_BYTES) return badRequest(c, 'avatar too large');
     if (bytes.length < PNG_SIGNATURE.length || !PNG_SIGNATURE.every((b, i) => bytes[i] === b)) {
-      return c.json({ error: { code: 'bad_request', message: 'not a PNG image' } }, 400);
+      return badRequest(c, 'not a PNG image');
     }
     avatar = body.avatar;
   }
   const result = await c.env.DB.prepare('UPDATE accounts SET avatar = ? WHERE mid = ?').bind(avatar, mid).run();
-  if (result.meta.changes === 0) return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404);
+  if (result.meta.changes === 0) return notFound(c, 'account not found');
   return c.json({ data: { ok: true } });
 });
 
@@ -174,7 +160,7 @@ admin.put('/config', async (c) => {
   ] as const) {
     if (value === undefined) continue;
     if (!Number.isInteger(value) || value < 1 || value > 1440) {
-      return c.json({ error: { code: 'bad_request', message: `${key} must be an integer in 1-1440` } }, 400);
+      return badRequest(c, `${key} must be an integer in 1-1440`);
     }
     await setConfigValue(c.env.DB, key, String(value));
   }
@@ -182,9 +168,10 @@ admin.put('/config', async (c) => {
 });
 
 admin.get('/cookie', async (c) => {
-  const row = await c.env.DB
-    .prepare("SELECT value, updated_at FROM app_config WHERE key = 'bilibili_cookie'")
-    .first<{ value: string; updated_at: string }>();
+  const row = await c.env.DB.prepare("SELECT value, updated_at FROM app_config WHERE key = 'bilibili_cookie'").first<{
+    value: string;
+    updated_at: string;
+  }>();
   const cookie = row?.value ?? '';
   return c.json({
     data: {
@@ -198,9 +185,7 @@ admin.get('/cookie', async (c) => {
 
 admin.put('/cookie', async (c) => {
   const body = await c.req.json<{ value: string }>();
-  if (!body.value?.trim() || body.value.length < 50) {
-    return c.json({ error: { code: 'bad_request', message: 'cookie looks too short' } }, 400);
-  }
+  if (!body.value?.trim() || body.value.length < 50) return badRequest(c, 'cookie looks too short');
   await setConfigValue(c.env.DB, 'bilibili_cookie', body.value.trim());
   return c.json({ data: { ok: true } });
 });

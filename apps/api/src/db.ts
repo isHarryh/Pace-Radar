@@ -12,6 +12,8 @@ export interface AccountRow extends Account {
   avatar: string | null;
 }
 
+export type PublicAccountRow = Omit<AccountRow, 'avatar'>;
+
 export interface RequestLogRow {
   id: number;
   account_id: number;
@@ -25,6 +27,24 @@ export interface RequestLogRow {
   updated_at: string;
 }
 
+export interface SeriesPoint {
+  updated_at: string;
+  comment_count: number;
+  like_count: number;
+  ratio_c_l: number;
+}
+
+function placeholders(ids: number[]): string {
+  return ids.map(() => '?').join(',');
+}
+
+function latestTargetCte(ph: string): string {
+  return `SELECT account_id, target_id FROM (
+    SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
+    FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
+  ) WHERE rn = 1`;
+}
+
 export async function listAccounts(db: D1Database): Promise<AccountRow[]> {
   const { results } = await db
     .prepare('SELECT id, mid, name, threshold, enabled, avatar FROM accounts WHERE id > 0 ORDER BY id')
@@ -32,18 +52,18 @@ export async function listAccounts(db: D1Database): Promise<AccountRow[]> {
   return results;
 }
 
-export async function listPublicAccounts(db: D1Database): Promise<Omit<AccountRow, 'avatar'>[]> {
+export async function listPublicAccounts(db: D1Database): Promise<PublicAccountRow[]> {
   const { results } = await db
     .prepare('SELECT id, mid, name, threshold, enabled FROM accounts WHERE id > 0 AND enabled = 1 ORDER BY id')
-    .all<Omit<AccountRow, 'avatar'>>();
+    .all<PublicAccountRow>();
   return results;
 }
 
-export async function getAccountByMid(db: D1Database, mid: number): Promise<Omit<AccountRow, 'avatar'> | null> {
+export async function getAccountByMid(db: D1Database, mid: number): Promise<PublicAccountRow | null> {
   const row = await db
     .prepare('SELECT id, mid, name, threshold, enabled FROM accounts WHERE mid = ? LIMIT 1')
     .bind(mid)
-    .first<Omit<AccountRow, 'avatar'>>();
+    .first<PublicAccountRow>();
   return row ?? null;
 }
 
@@ -78,12 +98,6 @@ export async function latestSnapshots(
   return results.reverse();
 }
 
-export interface SeriesPoint {
-  updated_at: string;
-  comment_count: number;
-  like_count: number;
-  ratio_c_l: number;
-}
 export async function series(
   db: D1Database,
   accountId: number,
@@ -103,33 +117,12 @@ export async function series(
   return results;
 }
 
-/** 批量获取每个账号的当前 target_id（最新 ok 快照的 target_id）。 */
-export async function currentTargetMap(db: D1Database, accountIds: number[]): Promise<Map<number, string | null>> {
-  const map = new Map<number, string | null>();
-  for (const id of accountIds) map.set(id, null);
-  if (accountIds.length === 0) return map;
-  const ph = accountIds.map(() => '?').join(',');
-  const sql = `SELECT account_id, target_id FROM (
-      SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
-      FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-    ) WHERE rn = 1`;
-  const { results } = await db.prepare(sql).bind(...accountIds).all<{ account_id: number; target_id: string }>();
-  for (const row of results) map.set(row.account_id, row.target_id);
-  return map;
-}
-
-/** 批量获取最近 10 条 ratio（按 target 过滤），返回 accountId -> ratios（升序，即旧->新）。 */
 export async function recentRatiosBatch(db: D1Database, accountIds: number[]): Promise<Map<number, number[]>> {
   const map = new Map<number, number[]>();
   for (const id of accountIds) map.set(id, []);
   if (accountIds.length === 0) return map;
-  const ph = accountIds.map(() => '?').join(',');
-  const sql = `WITH latest_target AS (
-      SELECT account_id, target_id FROM (
-        SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
-        FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-      ) WHERE rn = 1
-    ),
+  const ph = placeholders(accountIds);
+  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
     ranked AS (
       SELECT s.account_id, s.ratio_c_l, s.updated_at, s.id,
              ROW_NUMBER() OVER (PARTITION BY s.account_id ORDER BY s.updated_at DESC, s.id DESC) AS rn
@@ -142,14 +135,10 @@ export async function recentRatiosBatch(db: D1Database, accountIds: number[]): P
     .prepare(sql)
     .bind(...accountIds, ...accountIds)
     .all<{ account_id: number; ratio_c_l: number; updated_at: string; id: number }>();
-  for (const row of results) {
-    const arr = map.get(row.account_id);
-    if (arr) arr.push(row.ratio_c_l);
-  }
+  for (const row of results) map.get(row.account_id)!.push(row.ratio_c_l);
   return map;
 }
 
-/** 批量获取每个账号的最新 N 条 ok 快照（按 target 过滤）。 */
 export async function latestSnapshotsBatch(
   db: D1Database,
   accountIds: number[],
@@ -158,13 +147,8 @@ export async function latestSnapshotsBatch(
   const map = new Map<number, SnapshotRow[]>();
   for (const id of accountIds) map.set(id, []);
   if (accountIds.length === 0) return map;
-  const ph = accountIds.map(() => '?').join(',');
-  const sql = `WITH latest_target AS (
-      SELECT account_id, target_id FROM (
-        SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
-        FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-      ) WHERE rn = 1
-    ),
+  const ph = placeholders(accountIds);
+  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
     ranked AS (
       SELECT s.account_id, s.comment_count, s.like_count, s.share_count, s.ratio_c_l, s.updated_at, s.id,
              ROW_NUMBER() OVER (PARTITION BY s.account_id ORDER BY s.updated_at DESC, s.id DESC) AS rn
@@ -176,16 +160,14 @@ export async function latestSnapshotsBatch(
   const { results } = await db
     .prepare(sql)
     .bind(...accountIds, ...accountIds, limit)
-    .all<{ account_id: number } & SnapshotRow & { id: number }>();
+    .all<{ account_id: number } & SnapshotRow>();
   for (const row of results) {
-    const { account_id, id: _id, ...snap } = row as { account_id: number; id: number } & SnapshotRow;
-    const arr = map.get(account_id);
-    if (arr) arr.push(snap);
+    const { account_id, ...snap } = row as { account_id: number } & SnapshotRow;
+    map.get(account_id)!.push(snap);
   }
   return map;
 }
 
-/** 批量获取 sparkline / series 的小时桶数据（按 target 过滤）。 */
 export async function seriesBatch(
   db: D1Database,
   accountIds: number[],
@@ -195,13 +177,8 @@ export async function seriesBatch(
   const map = new Map<number, SeriesPoint[]>();
   for (const id of accountIds) map.set(id, []);
   if (accountIds.length === 0) return map;
-  const ph = accountIds.map(() => '?').join(',');
-  const sql = `WITH latest_target AS (
-      SELECT account_id, target_id FROM (
-        SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
-        FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-      ) WHERE rn = 1
-    ),
+  const ph = placeholders(accountIds);
+  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
     bucketed AS (
       SELECT s.account_id, s.comment_count, s.like_count, s.ratio_c_l, s.updated_at, s.id,
              ROW_NUMBER() OVER (PARTITION BY s.account_id, CAST(CAST(strftime('%s', s.updated_at) AS INTEGER) / ? AS INTEGER) ORDER BY s.updated_at DESC, s.id DESC) AS rn
@@ -216,13 +193,11 @@ export async function seriesBatch(
     .all<{ account_id: number } & SeriesPoint>();
   for (const row of results) {
     const { account_id, ...pt } = row as { account_id: number } & SeriesPoint;
-    const arr = map.get(account_id);
-    if (arr) arr.push(pt);
+    map.get(account_id)!.push(pt);
   }
   return map;
 }
 
-/** 最近 N 条请求日志（含成功与失败），按写入倒序。 */
 export async function requestLogs(db: D1Database, limit: number): Promise<RequestLogRow[]> {
   const { results } = await db
     .prepare(
