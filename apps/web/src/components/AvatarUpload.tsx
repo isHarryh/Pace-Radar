@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { updateAdminAvatar } from '../api';
 import { Avatar } from './Avatar';
+import { btnSmall, btnSmallDanger } from './ui';
 
 /** 将图片文件 cover 裁剪缩放到 64x64 并导出 PNG base64。 */
 function fileToSquarePng(file: File): Promise<string> {
@@ -78,7 +79,7 @@ export function AvatarUpload({
       />
       <button
         type="button"
-        className="button-small"
+        className={btnSmall}
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
@@ -87,7 +88,8 @@ export function AvatarUpload({
       {hasAvatar && (
         <button
           type="button"
-          className="button-small-danger"
+        className={btnSmallDanger}
+        disabled={busy}
           onClick={() => {
             void updateAdminAvatar(accountId, null).then(onSaved);
           }}

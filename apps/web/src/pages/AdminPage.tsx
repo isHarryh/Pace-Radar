@@ -7,7 +7,7 @@ import { ConfigSection } from '../components/admin/ConfigSection';
 import { CookieSection } from '../components/admin/CookieSection';
 import { RequestLogsTable } from '../components/admin/LogsSection';
 import { RefreshControl, useRefresh } from '../components/RefreshControl';
-import { surface, surfaceContent, tabClass } from '../components/ui';
+import { pageShell, surface, surfaceContent, tabClass } from '../components/ui';
 
 export function AdminPage() {
   const { intervalMs } = useRefresh();
@@ -24,14 +24,14 @@ export function AdminPage() {
       <Header back>
         <RefreshControl />
       </Header>
-      <main className="page-shell">
+      <main className={pageShell}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-lg font-semibold text-ink sm:text-xl">管理后台</h1>
           <div className="flex gap-2 self-start sm:self-auto">
-            <button onClick={() => setTab('manage')} className={tabClass(tab === 'manage')}>
+            <button type="button" onClick={() => setTab('manage')} aria-pressed={tab === 'manage'} className={tabClass(tab === 'manage')}>
               账号与配置
             </button>
-            <button onClick={() => setTab('logs')} className={tabClass(tab === 'logs')}>
+            <button type="button" onClick={() => setTab('logs')} aria-pressed={tab === 'logs'} className={tabClass(tab === 'logs')}>
               请求日志
             </button>
           </div>

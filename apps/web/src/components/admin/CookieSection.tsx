@@ -45,7 +45,7 @@ export function CookieSection() {
             <p className="mt-1 text-xs leading-relaxed text-muted">用于采集端请求 B 站，需含 SESSDATA 的完整字符串。</p>
           </div>
           {data && (
-            <span className="cookie-status">
+            <span className="inline-flex flex-wrap items-center gap-2 self-start rounded-lg bg-white px-2.5 py-1 text-xs text-muted shadow-sm sm:self-auto">
               {data.masked ? (
                 <>
                   <span className="max-w-[16ch] truncate font-mono text-[11px] sm:max-w-[22ch]">{data.masked}…</span>

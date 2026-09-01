@@ -1,16 +1,17 @@
 import { formatClock, formatCount, formatCountWan } from '../../format';
+import { badgeBase, badgeTone, tableBase, tableScroll } from '../ui';
 
 export function StatusCodeBadge({ code }: { code: string }) {
   const cls =
     code === 'ok'
-      ? 'status-ok'
+      ? badgeTone.brand
       : code === '-101'
-        ? 'status-expired'
+        ? badgeTone.watch
         : code === '412' || code === '429' || code === '-352'
-          ? 'status-danger'
-          : 'status-muted';
+          ? badgeTone.danger
+          : badgeTone.muted;
   return (
-    <span className={`status-code-badge ${cls}`}>
+    <span className={`${badgeBase} ${cls}`}>
       {code === 'ok' ? 'ok' : code}
     </span>
   );
@@ -18,8 +19,8 @@ export function StatusCodeBadge({ code }: { code: string }) {
 
 export function RequestLogsTable({ logs }: { logs: { id: number; accountId: number; accountName: string | null; commentCount: number; likeCount: number; statusCode: string; endpoint: string; updatedAt: string }[] }) {
   return (
-    <div className="data-table-scroll -mx-3 px-3 sm:mx-0 sm:px-0">
-      <table className="data-table min-w-[520px]">
+    <div className={`${tableScroll} -mx-3 px-3 sm:mx-0 sm:px-0`}>
+      <table className={`${tableBase} min-w-[520px]`}>
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted">
             <th className="py-2 pr-3 font-normal">时间</th>

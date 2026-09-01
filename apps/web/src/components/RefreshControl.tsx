@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { btnGhost } from './ui';
 
 const REFRESH_OPTIONS = [
   { value: 15_000, label: '15s' },
@@ -86,7 +87,7 @@ export function RefreshControl() {
         aria-busy={busy}
         onClick={() => void refresh()}
         disabled={busy}
-        className="button-secondary h-9 gap-1.5 rounded-l-none border border-line px-3 text-xs disabled:bg-line disabled:text-muted sm:text-sm"
+        className={`${btnGhost} !h-9 gap-1.5 rounded-l-none border border-line px-3 text-xs disabled:bg-line disabled:text-muted sm:text-sm`}
       >
         <span aria-hidden="true">↻</span>
         刷新

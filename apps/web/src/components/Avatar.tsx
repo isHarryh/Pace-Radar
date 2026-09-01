@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { avatarUrl } from '../api';
+import { avatarBase } from './ui';
 
 export function Avatar({
   accountId,
@@ -14,7 +15,7 @@ export function Avatar({
 }) {
   const [failed, setFailed] = useState(false);
   const sizeClass = size === 28 ? 'size-7 text-xs leading-7' : size === 36 ? 'size-9 text-base leading-9' : 'size-8 text-sm leading-8';
-  const cls = `avatar ${sizeClass} ${className ?? ''}`;
+  const cls = `${avatarBase} ${sizeClass} ${className ?? ''}`;
   if (failed) {
     return <span className={cls}>{name?.[0] ?? '?'}</span>;
   }
@@ -24,6 +25,8 @@ export function Avatar({
       width={size}
       height={size}
       alt=""
+      loading="lazy"
+      decoding="async"
       className={`${cls} object-cover`}
       onError={() => setFailed(true)}
     />

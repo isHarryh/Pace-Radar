@@ -9,7 +9,7 @@ import {
 import { AvatarUpload } from '../AvatarUpload';
 import { useRefresh } from '../RefreshControl';
 
-import { btnPrimary, btnPrimarySm, errorMessage, fieldLabel, inputBase, surface, surfaceFormFooter, surfaceHeader } from '../ui';
+import { btnPrimary, btnPrimarySm, errorMessage, fieldLabel, inputBase, surface, surfaceFormFooter, surfaceHeader, tableBase, tableScroll } from '../ui';
 
 function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () => void }) {
   const [name, setName] = useState(account.name);
@@ -54,14 +54,20 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
           min="0.01"
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-          className={`${inputBase} h-8 w-20`}
+           className={`${inputBase} !h-8 w-20`}
           inputMode="decimal"
         />
       </td>
       <td className="py-2.5 pr-3">
-        <label className="toggle">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="peer sr-only" />
-          <span className="toggle-track" />
+        <label className="relative inline-flex cursor-pointer items-center">
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+            aria-label={`启用 ${account.name}`}
+            className="peer sr-only"
+          />
+          <span className="relative h-5 w-9 rounded-full bg-line transition after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-brand peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-brand/30" />
         </label>
       </td>
       <td className="py-2.5">
@@ -119,8 +125,8 @@ export function AccountsSection() {
         <h2 className="text-sm font-semibold text-ink">监控账号</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">管理 B 站 UID 与评赞比阈值，启用后即进入采集队列。</p>
       </div>
-      <div className="data-table-scroll">
-        <table className="data-table min-w-[640px]">
+      <div className={tableScroll}>
+        <table className={`${tableBase} min-w-[640px]`}>
           <thead>
             <tr className="border-b border-line bg-bg/30 text-left text-xs text-muted">
               <th className="px-4 py-2.5 font-medium">头像</th>

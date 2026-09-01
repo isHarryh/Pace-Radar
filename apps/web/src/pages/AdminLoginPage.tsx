@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { fetchAdminAccounts, setAdminToken, clearAdminToken } from '../api';
 import { Header } from '../components/Header';
-import { errorMessage, fieldLabel, inputBase } from '../components/ui';
+import { btnPrimary, errorMessage, fieldLabel, inputBase, pageShellNarrow, surface, surfaceBody, surfaceFooter, surfaceHeader } from '../components/ui';
 
 export function AdminLoginPage() {
   const [token, setToken] = useState('');
@@ -30,13 +30,13 @@ export function AdminLoginPage() {
   return (
     <>
       <Header back />
-      <main className="page-shell-narrow">
-        <section className="surface shadow-sm">
-          <div className="surface-header auth-header">
+      <main className={pageShellNarrow}>
+        <section className={surface}>
+          <div className={`${surfaceHeader} px-5 py-4`}>
             <h1 className="text-sm font-semibold text-ink">管理后台登录</h1>
             <p className="mt-1 text-xs leading-relaxed text-muted">受保护区域，需访问令牌。令牌由 `app_config.admin_token` 配置。</p>
           </div>
-          <div className="auth-body">
+          <div className={`${surfaceBody} p-5`}>
             <label className={fieldLabel}>
               <span>访问令牌</span>
               <input
@@ -53,12 +53,12 @@ export function AdminLoginPage() {
             </label>
             {error && <p className={`${errorMessage} mt-3`}>{error}</p>}
           </div>
-          <div className="auth-footer">
+          <div className={`${surfaceFooter} px-5 py-3`}>
             <button
               type="button"
               disabled={busy || !token.trim()}
               onClick={submit}
-              className="button-primary w-full"
+              className={`${btnPrimary} w-full`}
             >
               {busy ? '验证中…' : '进入管理后台'}
             </button>

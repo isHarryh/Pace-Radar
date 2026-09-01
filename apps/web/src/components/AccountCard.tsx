@@ -42,11 +42,9 @@ function Sparkline({ points }: { points: { t: string; growth: number }[] }) {
 export function AccountCard({ account }: { account: AccountView }) {
   const { latest, perMinute } = account;
   return (
-    <article
-      onClick={() => {
-        window.location.hash = `#/accounts/${account.mid}`;
-      }}
-      className="account-card"
+    <a
+      href={`#/accounts/${account.mid}`}
+      className="group flex cursor-pointer flex-col gap-3 rounded-lg border border-line bg-white p-4 text-inherit no-underline shadow-sm transition hover:-translate-y-px hover:border-brand hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 active:bg-bg"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
@@ -74,6 +72,6 @@ export function AccountCard({ account }: { account: AccountView }) {
       ) : (
         <p className="py-2 text-center text-xs text-muted">暂无数据</p>
       )}
-    </article>
+    </a>
   );
 }
