@@ -78,7 +78,7 @@ export function AvatarUpload({
       />
       <button
         type="button"
-        className="inline-flex h-7 items-center justify-center rounded-full bg-bg px-2.5 text-xs font-medium text-ink transition hover:bg-line disabled:opacity-40"
+        className="button-small"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
       >
@@ -87,7 +87,7 @@ export function AvatarUpload({
       {hasAvatar && (
         <button
           type="button"
-          className="inline-flex h-7 items-center justify-center rounded-full bg-white px-2.5 text-xs font-medium text-muted ring-1 ring-line transition hover:bg-bg hover:text-danger"
+          className="button-small-danger"
           onClick={() => {
             void updateAdminAvatar(accountId, null).then(onSaved);
           }}

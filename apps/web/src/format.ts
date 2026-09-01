@@ -7,8 +7,11 @@ export function formatCount(n: number): string {
   return String(n);
 }
 
-export function formatCountComma(n: number): string {
-  return n.toLocaleString('en-US');
+export function formatCountWan(n: number): string {
+  const sign = n < 0 ? '-' : '';
+  const [integer, fraction] = Math.abs(n).toString().split('.');
+  const grouped = integer!.replace(/\B(?=(\d{4})+(?!\d))/g, ',');
+  return `${sign}${grouped}${fraction ? `.${fraction}` : ''}`;
 }
 
 export function formatClock(value: string): string {

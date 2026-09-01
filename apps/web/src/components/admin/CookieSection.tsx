@@ -4,7 +4,7 @@ import { fetchAdminCookie, updateAdminCookie } from '../../api';
 import { formatClock } from '../../format';
 import { StatusCodeBadge } from './LogsSection';
 
-import { btnGhost, btnPrimary, inputBase } from './ui';
+import { btnGhost, btnPrimary, errorMessage, fieldLabel, inputBase, surface, surfaceBody, surfaceFooter, surfaceHeader } from '../ui';
 
 export function CookieSection() {
   const queryClient = useQueryClient();
@@ -35,15 +35,15 @@ export function CookieSection() {
   };
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-white">
-      <div className="border-b border-line/60 bg-bg/40 px-4 py-3">
+    <section className={surface}>
+      <div className={surfaceHeader}>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-ink">B站 Cookie</h2>
             <p className="mt-1 text-xs leading-relaxed text-muted">用于采集端请求 B 站，需含 SESSDATA 的完整字符串。</p>
           </div>
           {data && (
-            <span className="inline-flex flex-wrap items-center gap-2 self-start rounded-full bg-white px-2.5 py-1 text-xs text-muted shadow-sm sm:self-auto">
+            <span className="cookie-status">
               {data.masked ? (
                 <>
                   <span className="max-w-[16ch] truncate font-mono text-[11px] sm:max-w-[22ch]">{data.masked}…</span>
@@ -60,8 +60,8 @@ export function CookieSection() {
           )}
         </div>
       </div>
-      <div className="p-4">
-        <label className="flex flex-col gap-1.5 text-xs font-medium text-ink">
+      <div className={surfaceBody}>
+        <label className={fieldLabel}>
           <span>粘贴新 Cookie</span>
           <textarea
             value={value}
@@ -71,10 +71,10 @@ export function CookieSection() {
             className={`${inputBase} min-h-24 resize-y py-2.5 font-mono text-xs leading-relaxed`}
           />
         </label>
-        {error && <p className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+        {error && <p className={`${errorMessage} mt-3`}>{error}</p>}
         <p className="mt-2 text-xs text-muted">提示：从浏览器开发者工具 → Application → Cookies 复制，或使用 EditThisCookie 导出。</p>
       </div>
-      <div className="flex flex-col gap-2 border-t border-line/60 bg-bg/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={surfaceFooter}>
         <span className="hidden text-xs text-muted sm:inline">长度需 ≥50 字符，更新后即时生效</span>
         <div className="flex gap-2 self-stretch sm:self-auto">
           <button type="button" disabled={!value} onClick={() => setValue('')} className={btnGhost}>

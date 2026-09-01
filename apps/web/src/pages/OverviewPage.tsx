@@ -13,7 +13,7 @@ export function OverviewPage() {
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+      <main className="page-shell">
         {isLoading && <p className="py-16 text-center text-sm text-muted">加载中…</p>}
         {isError && <p className="py-16 text-center text-sm text-muted">数据加载失败，请稍后刷新重试</p>}
         {data?.length === 0 && <p className="py-16 text-center text-sm text-muted">尚未配置监测账号</p>}

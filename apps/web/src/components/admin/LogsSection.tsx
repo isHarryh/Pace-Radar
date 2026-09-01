@@ -1,16 +1,16 @@
-import { formatClock, formatCount } from '../../format';
+import { formatClock, formatCount, formatCountWan } from '../../format';
 
 export function StatusCodeBadge({ code }: { code: string }) {
   const cls =
     code === 'ok'
-      ? 'bg-brand/10 text-brand'
+      ? 'status-ok'
       : code === '-101'
-        ? 'bg-watch/10 text-watch'
+        ? 'status-expired'
         : code === '412' || code === '429' || code === '-352'
-          ? 'bg-danger/10 text-danger'
-          : 'bg-line text-muted';
+          ? 'status-danger'
+          : 'status-muted';
   return (
-    <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${cls}`}>
+    <span className={`status-code-badge ${cls}`}>
       {code === 'ok' ? 'ok' : code}
     </span>
   );
@@ -18,8 +18,8 @@ export function StatusCodeBadge({ code }: { code: string }) {
 
 export function RequestLogsTable({ logs }: { logs: { id: number; accountId: number; accountName: string | null; commentCount: number; likeCount: number; statusCode: string; endpoint: string; updatedAt: string }[] }) {
   return (
-    <div className="-mx-3 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-      <table className="w-full min-w-[520px] text-sm">
+    <div className="data-table-scroll -mx-3 px-3 sm:mx-0 sm:px-0">
+      <table className="data-table min-w-[520px]">
         <thead>
           <tr className="border-b border-line text-left text-xs text-muted">
             <th className="py-2 pr-3 font-normal">时间</th>
@@ -39,7 +39,7 @@ export function RequestLogsTable({ logs }: { logs: { id: number; accountId: numb
               <td className="py-2.5 pr-3 sm:py-2">
                 <StatusCodeBadge code={log.statusCode} />
               </td>
-              <td className="py-2.5 pr-3 text-ink sm:py-2">{log.statusCode === 'ok' ? formatCount(log.commentCount) : '—'}</td>
+              <td className="py-2.5 pr-3 text-ink sm:py-2">{log.statusCode === 'ok' ? formatCountWan(log.commentCount) : '—'}</td>
               <td className="py-2.5 text-ink sm:py-2">{log.statusCode === 'ok' ? formatCount(log.likeCount) : '—'}</td>
             </tr>
           ))}

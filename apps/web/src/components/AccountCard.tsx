@@ -9,7 +9,7 @@ function buildSparkOption(points: { t: string; growth: number }[]): EChartsOptio
   return {
     grid: { left: 0, right: 0, top: 2, bottom: 0 },
     xAxis: { type: 'category', show: false, data: points.map((p) => p.t) },
-    yAxis: { type: 'value', show: false, min: 0 },
+    yAxis: { type: 'value', show: false },
     series: [
       {
         type: 'line',
@@ -46,7 +46,7 @@ export function AccountCard({ account }: { account: AccountView }) {
       onClick={() => {
         window.location.hash = `#/accounts/${account.mid}`;
       }}
-      className="flex cursor-pointer flex-col gap-3 rounded-xl border border-line bg-white p-3.5 transition-colors active:bg-bg hover:border-brand sm:rounded-lg sm:p-4"
+      className="account-card"
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">

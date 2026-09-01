@@ -8,8 +8,7 @@ import {
 } from '../../api';
 import { AvatarUpload } from '../AvatarUpload';
 
-import { btnPrimarySm, inputBase } from './ui';
-const toggleCls = 'sr-only';
+import { btnPrimary, btnPrimarySm, errorMessage, fieldLabel, inputBase, surface, surfaceFormFooter, surfaceHeader } from '../ui';
 
 function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () => void }) {
   const [name, setName] = useState(account.name);
@@ -59,11 +58,9 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
         />
       </td>
       <td className="py-2.5 pr-3">
-        <label className="relative inline-flex cursor-pointer items-center">
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className={toggleCls} />
-          <span
-            className={`h-5 w-9 rounded-full transition ${enabled ? 'bg-brand' : 'bg-line'} after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition ${enabled ? 'after:translate-x-4' : ''}`}
-          />
+        <label className="toggle">
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="peer sr-only" />
+          <span className="toggle-track" />
         </label>
       </td>
       <td className="py-2.5">
@@ -71,7 +68,7 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
           <button type="button" disabled={!canSave} onClick={save} className={btnPrimarySm}>
             {busy ? '保存中' : '保存'}
           </button>
-          {error && <span className="max-w-[14ch] truncate text-xs text-danger" title={error}>{error}</span>}
+          {error && <span className={`${errorMessage} max-w-[14ch] truncate`} title={error}>{error}</span>}
         </div>
       </td>
     </tr>
@@ -115,13 +112,13 @@ export function AccountsSection() {
   const canCreate = newMid.trim().length > 0 && newName.trim().length > 0 && !busy;
 
   return (
-    <section className="overflow-hidden rounded-xl border border-line bg-white">
-      <div className="border-b border-line/60 bg-bg/40 px-4 py-3">
+    <section className={surface}>
+      <div className={surfaceHeader}>
         <h2 className="text-sm font-semibold text-ink">监控账号</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">管理 B 站 UID 与评赞比阈值，启用后即进入采集队列。</p>
       </div>
-      <div className="-mx-0 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden">
-        <table className="w-full min-w-[640px] text-sm">
+      <div className="data-table-scroll">
+        <table className="data-table min-w-[640px]">
           <thead>
             <tr className="border-b border-line bg-bg/30 text-left text-xs text-muted">
               <th className="px-4 py-2.5 font-medium">头像</th>
@@ -140,13 +137,13 @@ export function AccountsSection() {
         </table>
         {!accounts?.length && <p className="py-10 text-center text-sm text-muted">暂无账号，请在下方新增</p>}
       </div>
-      <div className="border-t border-line/60 bg-bg/30 p-3 sm:p-4">
+      <div className={surfaceFormFooter}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_180px_1fr] sm:items-end">
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-ink">
+          <label className={fieldLabel}>
             <span>UID <span className="font-normal text-muted">· 数字</span></span>
             <input placeholder="如 2" value={newMid} onChange={(e) => setNewMid(e.target.value)} className={inputBase} inputMode="numeric" />
           </label>
-          <label className="flex flex-col gap-1.5 text-xs font-medium text-ink">
+          <label className={fieldLabel}>
             <span>显示名称</span>
             <input placeholder="如 哔哩哔哩官方" value={newName} onChange={(e) => setNewName(e.target.value)} className={inputBase} />
           </label>
@@ -155,13 +152,13 @@ export function AccountsSection() {
               type="button"
               disabled={!canCreate}
               onClick={create}
-              className="inline-flex h-9 w-full items-center justify-center rounded-lg bg-brand px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-hover active:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+              className={`${btnPrimary} w-full sm:w-auto`}
             >
               {busy ? '创建中…' : '新增账号'}
             </button>
           </div>
         </div>
-        {error && <p className="mt-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
+        {error && <p className={`${errorMessage} mt-3`}>{error}</p>}
         <p className="mt-2 hidden text-xs text-muted sm:block">提示：UID 为 space.bilibili.com/ 后的数字，阈值默认 0.5。</p>
       </div>
     </section>

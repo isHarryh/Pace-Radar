@@ -59,7 +59,7 @@ function toGrowthPoints(points: { updated_at: string; comment_count: number }[])
     const prev = points[i - 1]!;
     const minutes = (parseDbTime(p.updated_at).getTime() - parseDbTime(prev.updated_at).getTime()) / 60_000;
     const growth = minutes > 0 ? (p.comment_count - prev.comment_count) / minutes : 0;
-    return { t: p.updated_at, growth: growth < 0 ? 0 : growth };
+    return { t: p.updated_at, growth };
   });
 }
 

@@ -13,13 +13,10 @@ export function Avatar({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
-  const cls = `inline-block shrink-0 overflow-hidden rounded-full bg-line text-center font-medium text-muted ${className ?? ''}`;
+  const sizeClass = size === 28 ? 'size-7 text-xs leading-7' : size === 36 ? 'size-9 text-base leading-9' : 'size-8 text-sm leading-8';
+  const cls = `avatar ${sizeClass} ${className ?? ''}`;
   if (failed) {
-    return (
-      <span className={cls} style={{ width: size, height: size, lineHeight: `${size}px`, fontSize: size * 0.45 }}>
-        {name?.[0] ?? '?'}
-      </span>
-    );
+    return <span className={cls}>{name?.[0] ?? '?'}</span>;
   }
   return (
     <img

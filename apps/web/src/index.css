@@ -32,6 +32,184 @@ body {
   }
 }
 
+@layer components {
+  .page-shell {
+    @apply mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6;
+  }
+
+  .page-shell-narrow {
+    @apply mx-auto max-w-sm px-3 py-8 sm:px-4 sm:py-12;
+  }
+
+  .app-header {
+    @apply sticky top-0 z-10 border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80;
+  }
+
+  .app-header-inner {
+    @apply mx-auto flex max-w-5xl items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4 sm:py-4;
+  }
+
+  .app-brand {
+    @apply shrink-0 text-base font-semibold text-brand sm:text-lg;
+  }
+
+  .app-brand-subtitle {
+    @apply hidden text-sm text-muted sm:inline;
+  }
+
+  .app-back-link {
+    @apply inline-flex min-h-9 items-center rounded-full bg-bg px-3 py-1.5 text-sm font-medium text-ink hover:bg-line sm:bg-transparent sm:px-0 sm:py-0 sm:font-normal sm:text-brand sm:hover:text-brand-hover;
+  }
+
+  .surface {
+    @apply overflow-hidden rounded-xl border border-line bg-white;
+  }
+
+  .surface-header {
+    @apply border-b border-line/60 bg-bg/40 px-4 py-3;
+  }
+
+  .surface-body {
+    @apply p-4;
+  }
+
+  .surface-footer {
+    @apply flex flex-col gap-2 border-t border-line/60 bg-bg/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between;
+  }
+
+  .surface-form-footer {
+    @apply border-t border-line/60 bg-bg/30 p-3 sm:p-4;
+  }
+
+  .surface-content {
+    @apply p-3 sm:rounded-lg sm:p-4;
+  }
+
+  .auth-header {
+    @apply px-5 py-4;
+  }
+
+  .auth-body {
+    @apply p-5;
+  }
+
+  .auth-footer {
+    @apply border-t border-line/60 bg-bg/30 px-5 py-3;
+  }
+
+  .field-label {
+    @apply flex flex-col gap-1.5 text-xs font-medium text-ink;
+  }
+
+  .form-input {
+    @apply h-9 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/60 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/15 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .button-primary {
+    @apply inline-flex h-9 items-center justify-center rounded-lg bg-brand px-5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-hover active:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .button-secondary {
+    @apply inline-flex h-9 items-center justify-center rounded-lg bg-bg px-4 text-sm font-medium text-ink transition hover:bg-line;
+  }
+
+  .button-primary-sm {
+    @apply inline-flex h-8 items-center justify-center rounded-lg bg-brand px-3.5 text-xs font-medium text-white shadow-sm transition hover:bg-brand-hover active:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .button-small {
+    @apply inline-flex h-7 items-center justify-center rounded-full bg-bg px-2.5 text-xs font-medium text-ink transition hover:bg-line disabled:opacity-40;
+  }
+
+  .button-small-danger {
+    @apply inline-flex h-7 items-center justify-center rounded-full bg-white px-2.5 text-xs font-medium text-muted ring-1 ring-line transition hover:bg-bg hover:text-danger;
+  }
+
+  .message-error {
+    @apply rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger;
+  }
+
+  .tab-button {
+    @apply inline-flex min-h-8 items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors sm:min-h-0 sm:rounded sm:px-3 sm:py-1;
+  }
+
+  .tab-button-active {
+    @apply bg-brand text-white shadow-sm;
+  }
+
+  .tab-button-idle {
+    @apply bg-bg text-muted hover:bg-line hover:text-ink;
+  }
+
+  .status-badge,
+  .status-code-badge {
+    @apply inline-flex rounded px-2 py-0.5 text-xs font-medium;
+  }
+
+  .status-normal,
+  .status-ok {
+    @apply bg-brand/10 text-brand;
+  }
+
+  .status-watching,
+  .status-expired {
+    @apply bg-watch/10 text-watch;
+  }
+
+  .status-active,
+  .status-danger {
+    @apply bg-danger/10 text-danger;
+  }
+
+  .status-muted {
+    @apply bg-line text-muted;
+  }
+
+  .cookie-status {
+    @apply inline-flex flex-wrap items-center gap-2 self-start rounded-full bg-white px-2.5 py-1 text-xs text-muted shadow-sm sm:self-auto;
+  }
+
+  .toggle {
+    @apply relative inline-flex cursor-pointer items-center;
+  }
+
+  .toggle-track {
+    @apply h-5 w-9 rounded-full bg-line transition after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition;
+  }
+
+  .toggle input:checked + .toggle-track {
+    @apply bg-brand;
+  }
+
+  .toggle input:checked + .toggle-track::after {
+    @apply translate-x-4;
+  }
+
+  .data-table-scroll {
+    @apply overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden;
+  }
+
+  .data-table {
+    @apply w-full text-sm;
+  }
+
+  .stat-card {
+    @apply rounded-xl border border-line bg-white p-3 sm:rounded-lg sm:p-4;
+  }
+
+  .account-card {
+    @apply flex cursor-pointer flex-col gap-3 rounded-xl border border-line bg-white p-3.5 transition-colors active:bg-bg hover:border-brand sm:rounded-lg sm:p-4;
+  }
+
+  .chart-panel {
+    @apply mt-3 rounded-xl border border-line bg-white p-3 sm:mt-4 sm:rounded-lg sm:p-4;
+  }
+
+  .avatar {
+    @apply inline-block shrink-0 overflow-hidden rounded-full bg-line text-center font-medium text-muted;
+  }
+}
+
 /* 表格/图表横滑时隐藏滚动条但保留手势 */
 .overscroll-x-contain {
   -webkit-overflow-scrolling: touch;

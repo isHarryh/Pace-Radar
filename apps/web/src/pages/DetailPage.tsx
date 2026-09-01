@@ -5,7 +5,8 @@ import { fetchAccount, fetchSeries, type SeriesPoint } from '../api';
 import { Avatar } from '../components/Avatar';
 import { Header } from '../components/Header';
 import { StatusBadge } from '../components/StatusBadge';
-import { formatClock, formatCountComma } from '../format';
+import { tabClass } from '../components/ui';
+import { formatClock, formatCountWan } from '../format';
 import { useECharts } from '../useECharts';
 
 type Metric = 'comments' | 'growth' | 'ratio';
@@ -22,7 +23,11 @@ function buildMainOption(points: SeriesPoint[], metric: Metric): EChartsOption {
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   return {
     grid: { left: isMobile ? 44 : 56, right: 12, top: 16, bottom: 32 },
-    tooltip: { trigger: 'axis', confine: true },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      valueFormatter: metric === 'comments' ? (value) => formatCountWan(Number(value)) : undefined,
+    },
     xAxis: {
       type: 'category',
       boundaryGap: false,
@@ -33,7 +38,11 @@ function buildMainOption(points: SeriesPoint[], metric: Metric): EChartsOption {
     yAxis: {
       type: 'value',
       splitLine: { lineStyle: { color: '#eef1f4' } },
-      axisLabel: { color: '#9499a0', fontSize: isMobile ? 10 : 12 },
+      axisLabel: {
+        color: '#9499a0',
+        fontSize: isMobile ? 10 : 12,
+        formatter: metric === 'comments' ? (value) => formatCountWan(Number(value)) : undefined,
+      },
     },
     series: [
       {
@@ -59,12 +68,9 @@ function buildMainOption(points: SeriesPoint[], metric: Metric): EChartsOption {
   };
 }
 
-const tabClass = (active: boolean) =>
-  `inline-flex min-h-8 items-center justify-center whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors sm:rounded sm:px-3 sm:py-1 ${active ? 'bg-brand text-white shadow-sm' : 'bg-bg text-muted hover:bg-line hover:text-ink'}`;
-
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-3 sm:rounded-lg sm:p-4">
+    <div className="stat-card">
       <p className="text-[11px] leading-none text-muted sm:text-xs">{label}</p>
       <p className="mt-1.5 truncate text-lg font-semibold leading-none text-ink sm:mt-1 sm:text-2xl">{value}</p>
     </div>
@@ -93,7 +99,7 @@ export function DetailPage({ mid }: { mid: number }) {
   return (
     <>
       <Header back />
-      <main className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+      <main className="page-shell">
         <div className="flex items-center gap-2.5 sm:gap-3">
           <Avatar accountId={mid} name={view?.name} size={36} className="sm:!h-10 sm:!w-10" />
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold leading-tight text-ink sm:text-xl">{view?.name ?? '加载中…'}</h1>
@@ -101,12 +107,12 @@ export function DetailPage({ mid }: { mid: number }) {
         </div>
 
         <div className="mt-3 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-4">
-          <StatCard label="盖楼层数" value={view?.latest ? formatCountComma(view.latest.commentCount) : '—'} />
+          <StatCard label="盖楼层数" value={view?.latest ? formatCountWan(view.latest.commentCount) : '—'} />
           <StatCard label="每分钟增速" value={view?.perMinute ? `${view.perMinute.comments.toFixed(1)}/分` : '—'} />
           <StatCard label="评赞比" value={view?.latest ? view.latest.ratio.toFixed(1) : '—'} />
         </div>
 
-        <div className="mt-3 rounded-xl border border-line bg-white p-3 sm:mt-4 sm:rounded-lg sm:p-4">
+        <div className="chart-panel">
           <div className="-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-2 sm:mx-0 sm:overflow-visible sm:px-0 sm:pb-0">
             <div className="flex shrink-0 gap-1.5 sm:gap-2">
               {(Object.keys(METRIC_META) as Metric[]).map((m) => (
