@@ -1,4 +1,4 @@
-import type { PaceConfig, PaceStatus } from './types';
+import type { PaceConfig, PaceStatus } from './types.js';
 
 export const DEFAULT_CONFIG: PaceConfig = {
   collectIntervalMinutes: 5,

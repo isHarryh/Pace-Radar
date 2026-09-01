@@ -1,0 +1,10 @@
+[Unit]
+Description=Pace-Radar collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/pace-radar
+EnvironmentFile=/etc/pace-radar/collector.env
+ExecStart=/usr/bin/node /opt/pace-radar/apps/collector-node/dist/main.js

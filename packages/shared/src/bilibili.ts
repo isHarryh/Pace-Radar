@@ -1,6 +1,6 @@
 import { md5 } from '@noble/hashes/legacy';
 import { bytesToHex } from '@noble/hashes/utils';
-import type { WbiKeys } from './types';
+import type { WbiKeys } from './types.js';
 
 export const BILI_API = 'https://api.bilibili.com';
 export const BILI_UA =

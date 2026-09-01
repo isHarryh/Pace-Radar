@@ -1,4 +1,4 @@
-import type { PaceStatus } from './types';
+import type { PaceStatus } from './types.js';
 
 const STATUS_WINDOW = 10;
 const WATCHING_OVER_COUNT = 1;

@@ -8,9 +8,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @pace-radar/collector-core test",
     "dev:web": "pnpm --filter @pace-radar/web dev",
     "dev:api": "pnpm --filter @pace-radar/api dev",
-    "dev:collector": "pnpm --filter @pace-radar/collector dev"
+    "dev:collector": "pnpm --filter @pace-radar/collector dev",
+    "build:collector-node": "pnpm --filter @pace-radar/collector-node build",
+    "deploy:cf:collector": "pnpm --filter @pace-radar/collector run deploy",
+    "deploy:cf:api": "pnpm --filter @pace-radar/api run deploy"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

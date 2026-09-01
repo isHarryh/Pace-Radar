@@ -1,0 +1,20 @@
+{
+  "name": "@pace-radar/collector-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@pace-radar/collector-core": "workspace:*",
+    "@pace-radar/shared": "workspace:*",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
+}

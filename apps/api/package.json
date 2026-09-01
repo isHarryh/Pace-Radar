@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "node ../../scripts/prepare-wrangler-config.mjs && wrangler deploy --config wrangler.generated.toml"
   },
   "dependencies": {
     "@pace-radar/shared": "workspace:*",
