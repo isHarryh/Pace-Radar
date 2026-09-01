@@ -124,10 +124,15 @@ export function DetailPage({ mid }: { mid: number }) {
     queryFn: () => fetchAccount(mid),
     refetchInterval: intervalMs,
   });
+  // Series (history) is heavier and changes less frequently than the real-time summary.
+  // Refresh it at most every 60s (or intervalMs if longer) to reduce repeated D1 scans,
+  // while the summary keeps the user-selected interval.
+  const seriesInterval = Math.max(intervalMs, 60_000);
   const series = useQuery({
     queryKey: ['series', mid, range],
     queryFn: () => fetchSeries(mid, range, resolution),
-    refetchInterval: intervalMs,
+    refetchInterval: seriesInterval,
+    staleTime: 30_000,
   });
 
   const chartRef = useECharts(buildMainOption(series.data?.points ?? [], metric, range));

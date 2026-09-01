@@ -2,7 +2,19 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { deriveStatus, parseDbTime, type PaceStatus } from '@pace-radar/shared';
 import { admin } from './admin';
-import { currentTargetId, latestSnapshots, listAccounts, recentRatios, series, type SnapshotRow } from './db';
+import {
+  currentTargetId,
+  getAccountByMid,
+  latestSnapshots,
+  latestSnapshotsBatch,
+  listPublicAccounts,
+  recentRatios,
+  recentRatiosBatch,
+  series,
+  seriesBatch,
+  type SnapshotRow,
+} from './db';
+import { cachedJson, noStoreHeaders, PUBLIC_CACHE_TTL_S } from './cache';
 
 export interface Env {
   DB: D1Database;
@@ -11,6 +23,15 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({ origin: '*' }));
+
+// Ensure admin routes are never cached (no-store) and public routes can be cached.
+// This middleware runs after admin route handling to set no-store headers.
+app.use('/api/admin/*', async (c, next) => {
+  await next();
+  // Force no-store for all admin responses
+  c.header('Cache-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
+});
 
 const RANGES: Record<string, string> = { '1h': '-1 hours', '24h': '-24 hours', '7d': '-7 days' };
 const RESOLUTIONS: Record<string, number> = { '1m': 60, '5m': 300, '1h': 3600 };
@@ -80,12 +101,15 @@ async function buildAccountView(db: D1Database, account: { id: number; mid: numb
   };
 }
 
-app.get('/api/health', (c) => c.json({ data: { ok: true } }));
+app.get('/api/health', async (c) => {
+  const cacheKey = `GET:${c.req.url}`;
+  return cachedJson(c, cacheKey, async () => ({ ok: true }), PUBLIC_CACHE_TTL_S);
+});
 
 app.get('/api/accounts/:mid/avatar', async (c) => {
   const mid = Number(c.req.param('mid'));
   const row = await c.env.DB.prepare('SELECT avatar FROM accounts WHERE mid = ?').bind(mid).first<{ avatar: string | null }>();
-  if (!row?.avatar) return c.json({ error: { code: 'not_found', message: 'no avatar' } }, 404);
+  if (!row?.avatar) return c.json({ error: { code: 'not_found', message: 'no avatar' } }, 404, noStoreHeaders());
   const bytes = Uint8Array.from(atob(row.avatar), (ch) => ch.charCodeAt(0));
   return new Response(bytes, {
     headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' },
@@ -93,59 +117,163 @@ app.get('/api/accounts/:mid/avatar', async (c) => {
 });
 
 app.get('/api/accounts', async (c) => {
-  const accounts = await listAccounts(c.env.DB);
-  const spark = await Promise.all(
-    accounts.map(async (account) => {
-      const points = await series(c.env.DB, account.id, SPARK_BUCKET_SECONDS, '-24 hours');
-      const growth = toGrowthPoints(points);
-      // 去掉首点 0 值，避免 spark 被 0 拉平；若仅 1 点则返回空由前端显示“暂无数据”
-      return growth.length > 1 ? growth.slice(1) : [];
-    }),
+  const cacheKey = `GET:${c.req.url}`;
+  return cachedJson(
+    c,
+    cacheKey,
+    async () => {
+      const accounts = await listPublicAccounts(c.env.DB);
+      if (accounts.length === 0) return [];
+      const ids = accounts.map((a) => a.id);
+      const [ratiosMap, snapshotsMap, sparkMap] = await Promise.all([
+        recentRatiosBatch(c.env.DB, ids),
+        latestSnapshotsBatch(c.env.DB, ids, 2),
+        seriesBatch(c.env.DB, ids, SPARK_BUCKET_SECONDS, '-24 hours'),
+      ]);
+      return accounts.map((account) => {
+        const ratios = ratiosMap.get(account.id) ?? [];
+        const rows = snapshotsMap.get(account.id) ?? [];
+        const points = sparkMap.get(account.id) ?? [];
+        const growth = toGrowthPoints(points);
+        const spark = growth.length > 1 ? growth.slice(1) : [];
+        const view: AccountView = {
+          id: account.id,
+          mid: account.mid,
+          name: account.name,
+          threshold: account.threshold,
+          status: deriveStatus(ratios, account.threshold),
+          latest: toLatestView(rows),
+          perMinute: toPerMinute(rows),
+        };
+        return { ...view, spark };
+      });
+    },
+    PUBLIC_CACHE_TTL_S,
   );
-  const views = await Promise.all(accounts.map((account) => buildAccountView(c.env.DB, account)));
-  return c.json({ data: views.map((view, i) => ({ ...view, spark: spark[i] })) });
 });
 
 app.get('/api/accounts/:mid', async (c) => {
   const mid = Number(c.req.param('mid'));
-  const account = (await listAccounts(c.env.DB)).find((a) => a.mid === mid);
-  if (!account) return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404);
-  return c.json({ data: await buildAccountView(c.env.DB, account) });
+  if (!Number.isInteger(mid) || mid <= 0) {
+    return c.json({ error: { code: 'bad_request', message: 'invalid mid' } }, 400, noStoreHeaders());
+  }
+  const cacheKey = `GET:${c.req.url}`;
+  try {
+    return await cachedJson(
+      c,
+      cacheKey,
+      async () => {
+        const account = await getAccountByMid(c.env.DB, mid);
+        if (!account) {
+          const e = new Error('not_found') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        // Public API only exposes enabled accounts.
+        if (!account.enabled) {
+          const e = new Error('not_found') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        return buildAccountView(c.env.DB, account);
+      },
+      PUBLIC_CACHE_TTL_S,
+    );
+  } catch (e: unknown) {
+    const err = e as { status?: number };
+    if (err?.status === 404) {
+      return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404, noStoreHeaders());
+    }
+    throw e;
+  }
 });
 
 app.get('/api/accounts/:mid/latest', async (c) => {
   const mid = Number(c.req.param('mid'));
-  const account = (await listAccounts(c.env.DB)).find((a) => a.mid === mid);
-  if (!account) return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404);
-  const rows = await latestSnapshots(c.env.DB, account.id, 1);
-  const latest = rows.at(-1);
-  if (!latest) return c.json({ error: { code: 'not_found', message: 'no snapshots yet' } }, 404);
-  return c.json({ data: toLatestView(rows) });
+  if (!Number.isInteger(mid) || mid <= 0) {
+    return c.json({ error: { code: 'bad_request', message: 'invalid mid' } }, 400, noStoreHeaders());
+  }
+  const cacheKey = `GET:${c.req.url}`;
+  try {
+    return await cachedJson(
+      c,
+      cacheKey,
+      async () => {
+        const account = await getAccountByMid(c.env.DB, mid);
+        if (!account || !account.enabled) {
+          const e = new Error('not_found') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        const rows = await latestSnapshots(c.env.DB, account.id, 1);
+        const latest = rows.at(-1);
+        if (!latest) {
+          const e = new Error('no_snapshot') as Error & { status?: number; code?: string };
+          e.status = 404;
+          (e as unknown as { code: string }).code = 'no_snapshot';
+          throw e;
+        }
+        return toLatestView(rows);
+      },
+      PUBLIC_CACHE_TTL_S,
+    );
+  } catch (e: unknown) {
+    const err = e as { status?: number; code?: string };
+    if (err?.status === 404) {
+      if (err?.code === 'no_snapshot') {
+        return c.json({ error: { code: 'not_found', message: 'no snapshots yet' } }, 404, noStoreHeaders());
+      }
+      return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404, noStoreHeaders());
+    }
+    throw e;
+  }
 });
 
 app.get('/api/accounts/:mid/series', async (c) => {
   const mid = Number(c.req.param('mid'));
-  const account = (await listAccounts(c.env.DB)).find((a) => a.mid === mid);
-  if (!account) return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404);
+  if (!Number.isInteger(mid) || mid <= 0) {
+    return c.json({ error: { code: 'bad_request', message: 'invalid mid' } }, 400, noStoreHeaders());
+  }
   const range = c.req.query('range') ?? '24h';
   const resolution = c.req.query('resolution') ?? '5m';
   const offset = RANGES[range];
   const bucket = RESOLUTIONS[resolution];
-  if (!offset || !bucket) return c.json({ error: { code: 'bad_request', message: 'unsupported range or resolution' } }, 400);
-  const points = await series(c.env.DB, account.id, bucket, offset);
-  const growthPoints = toGrowthPoints(points);
-  return c.json({
-    data: {
-      range,
-      resolution,
-      points: points.map((p, i) => ({
-        t: p.updated_at,
-        commentCount: p.comment_count,
-        ratio: p.ratio_c_l,
-        growth: growthPoints[i]!.growth,
-      })),
-    },
-  });
+  if (!offset || !bucket) return c.json({ error: { code: 'bad_request', message: 'unsupported range or resolution' } }, 400, noStoreHeaders());
+
+  const cacheKey = `GET:${c.req.url}`;
+  try {
+    return await cachedJson(
+      c,
+      cacheKey,
+      async () => {
+        const account = await getAccountByMid(c.env.DB, mid);
+        if (!account || !account.enabled) {
+          const e = new Error('not_found') as Error & { status?: number };
+          e.status = 404;
+          throw e;
+        }
+        const points = await series(c.env.DB, account.id, bucket, offset);
+        const growthPoints = toGrowthPoints(points);
+        return {
+          range,
+          resolution,
+          points: points.map((p, i) => ({
+            t: p.updated_at,
+            commentCount: p.comment_count,
+            ratio: p.ratio_c_l,
+            growth: growthPoints[i]!.growth,
+          })),
+        };
+      },
+      PUBLIC_CACHE_TTL_S,
+    );
+  } catch (e: unknown) {
+    const err = e as { status?: number };
+    if (err?.status === 404) {
+      return c.json({ error: { code: 'not_found', message: 'account not found' } }, 404, noStoreHeaders());
+    }
+    throw e;
+  }
 });
 
 app.route('/api/admin', admin);

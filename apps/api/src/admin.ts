@@ -22,7 +22,7 @@ async function loadAdminToken(db: D1Database): Promise<string | null> {
 }
 
 function unauthorized(c: Context, message: string) {
-  return c.json({ error: { code: 'unauthorized', message } }, 401);
+  return c.json({ error: { code: 'unauthorized', message } }, 401, { 'Cache-Control': 'no-store' });
 }
 
 async function loadConfig(db: D1Database): Promise<PaceConfig> {
@@ -66,6 +66,13 @@ async function checkCookieValidity(cookie: string): Promise<boolean | null> {
 }
 
 export const admin = new Hono<{ Bindings: { DB: D1Database } }>();
+
+// Prevent any admin response from being cached at edge or browser.
+admin.use('*', async (c, next) => {
+  await next();
+  c.header('Cache-Control', 'no-store');
+  c.header('CDN-Cache-Control', 'no-store');
+});
 
 admin.use('*', async (c, next) => {
   const expected = await loadAdminToken(c.env.DB);
