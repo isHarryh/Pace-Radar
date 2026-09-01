@@ -82,29 +82,43 @@ pnpm deploy:cf:collector
 
 #### b. 在 Linux 服务器部署采集服务
 
-如果使用 Linux 服务器，先安装 Node.js 22，再在仓库根目录构建 Node 版本：
+如果使用 Linux 服务器自部署方案，请先在服务器安装 Node.js 22、克隆本仓库，再在仓库根目录进行构建：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build:collector-node
 ```
 
-Linux 采集器通过 Cloudflare D1 HTTP API 访问同一份数据库，因此需要在 Cloudflare 控制台的 **My Profile -> API Tokens** 中创建一个自定义 API Token，只授予当前账号的 **Account -> D1 -> Edit** 权限。然后在服务器的环境文件中填写这个 Token、Cloudflare Account ID 和 D1 Database ID：
+在 Cloudflare 控制台的 **My Profile -> API Tokens** 中创建一个自定义 API Token，只授予当前账号的 **Account -> D1 -> Edit** 权限，复制这个 Token。然后在服务器复制一份环境变量文件：
 
-```ini
-# .env file:
-CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>
-D1_DATABASE_ID=<D1 database id>
-CLOUDFLARE_API_TOKEN=<D1 edit API token>
+```sh
+cp apps/collector-node/.env.example apps/collector-node/.env
 ```
 
-如果 Xray、V2Ray、sing-box 或 Clash 在本机提供 HTTP 代理，再增加 `BILI_PROXY_URL=http://127.0.0.1:10809`。没有代理时保持这一项注释状态。VMess 由代理客户端处理，采集器不需要实现 VMess 协议。
+编辑环境变量文件，填入以下内容：
 
-仓库中的 `apps/collector-node/deploy/systemd/` 提供了 systemd service 和 timer 示例。把项目部署到 `/opt/pace-radar`，把环境文件保存为 `/etc/pace-radar/collector.env`，再安装并启动 timer：
+```ini
+CLOUDFLARE_ACCOUNT_ID=<Cloudflare account id>  # 通过本地执行 pnpm exec wrangler whoami 获取
+D1_DATABASE_ID=<D1 database id>  # 先前创建的 D1 数据库 ID
+CLOUDFLARE_API_TOKEN=<D1 edit API token>  # 刚才创建的 API Token
+```
+
+如果 Xray、V2Ray、sing-box 或 Clash 在本机提供 HTTP 代理，再增加一个环境变量 `BILI_PROXY_URL=http://127.0.0.1:10809`。没有代理时保持这一项注释状态。
+
+仓库中的 `apps/collector-node/deploy/systemd/` 提供了 systemd service 和 timer 示例。示例默认把项目部署到 `/opt/pace-radar`，把环境文件保存为 `/etc/pace-radar/collector.env`，再安装并启动 timer。如果项目实际位于其他目录，例如 `/var/www/Pace-Radar`，安装 unit 后必须通过 `sudo systemctl edit pace-radar-collector.service` 覆盖 `WorkingDirectory` 和 `ExecStart` 中的路径，例如：
+
+```ini
+[Service]
+WorkingDirectory=/var/www/Pace-Radar
+ExecStart=
+ExecStart=/usr/bin/node /var/www/Pace-Radar/apps/collector-node/dist/main.js
+```
+
+保存后执行 `sudo systemctl daemon-reload`，再启动 timer：
 
 ```sh
 sudo install -d -m 700 /etc/pace-radar
-sudo install -m 600 apps/collector-node/.env.example /etc/pace-radar/collector.env
+sudo install -m 600 apps/collector-node/.env /etc/pace-radar/collector.env
 sudo install -m 644 apps/collector-node/deploy/systemd/pace-radar-collector.service /etc/systemd/system/
 sudo install -m 644 apps/collector-node/deploy/systemd/pace-radar-collector.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -112,7 +126,7 @@ sudo systemctl enable --now pace-radar-collector.timer
 systemctl list-timers pace-radar-collector.timer
 ```
 
-安装示例中的环境文件后，先编辑 `/etc/pace-radar/collector.env` 填入真实值。timer 每分钟启动一次采集进程，进程完成一轮采集后退出；采集日志可以用 `journalctl -u pace-radar-collector.service` 查看。
+此后，timer 会每分钟启动一次采集进程，进程完成一轮采集后退出；采集日志可以用 `journalctl -u pace-radar-collector.service` 查看。
 
 ### 3. 部署 API 服务
 
