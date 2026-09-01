@@ -5,5 +5,5 @@ compatibility_date = "2026-08-31"
 [[d1_databases]]
 binding = "DB"
 database_name = "pace-radar-db"
-database_id = "${DATABASE_ID-00000000-0000-0000-0000-000000000000}"
+database_id = "d29a9a1a-b940-49a6-b45f-a5a22d163414"
 migrations_dir = "../../migrations"

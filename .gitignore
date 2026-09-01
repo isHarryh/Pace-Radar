@@ -6,8 +6,6 @@ logs/
 node_modules/
 dist/
 .wrangler/
-*.generated.toml
-
 # Local secrets and seed data
 .env
 .env.*
