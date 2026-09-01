@@ -89,7 +89,7 @@ export function createBiliClient(transport: BiliTransport): BiliClient {
     async nav(cookie) {
       return biliFetch<NavResponse>('/x/web-interface/nav', '', await enrichCookie(cookie));
     },
-    async collectAccount(account: Account, cookie: string, wbiKeys: WbiKeys): Promise<FreshStat> {
+    async collectAccount(account: Account, cookie: string, wbiKeys: WbiKeys): Promise<FreshStat[]> {
       const query = signWbiQuery(
         { host_mid: String(account.mid), timezone_offset: '-480', platform: 'web', web_location: '333.1387' },
         wbiKeys,
@@ -98,26 +98,17 @@ export function createBiliClient(transport: BiliTransport): BiliClient {
       if (feed.code !== 0) throw new RequestError(String(feed.code), 'feed/space', `feed/space code ${feed.code}`);
       const items = feed.data?.items ?? [];
       if (items.length === 0) throw new RequestError('no_dynamic', 'feed/space', 'no recent dynamic');
-
-      let best = items[0]!;
-      let bestRatio = ratioOf(best.modules.module_stat.comment.count, best.modules.module_stat.like.count);
-      for (const item of items.slice(1)) {
+      return items.map((item) => {
         const stat = item.modules.module_stat;
-        const ratio = ratioOf(stat.comment.count, stat.like.count);
-        if (ratio > bestRatio) {
-          best = item;
-          bestRatio = ratio;
-        }
-      }
-      const stat = best.modules.module_stat;
-      return {
-        endpoint: 'feed/space',
-        targetType: 'dynamic',
-        targetId: best.id_str,
-        commentCount: stat.comment.count,
-        likeCount: stat.like.count,
-        shareCount: stat.forward.count,
-      };
+        return {
+          endpoint: 'feed/space' as const,
+          targetType: 'dynamic' as const,
+          targetId: item.id_str,
+          commentCount: stat.comment.count,
+          likeCount: stat.like.count,
+          shareCount: stat.forward.count,
+        };
+      });
     },
   };
 }

@@ -17,7 +17,12 @@ class FakeStore implements CollectorStore {
   async getScheduleState(): Promise<ScheduleState> {
     return { targetId: null, recentRatios: [], lastCollectedAt: null };
   }
+  async getScheduleStates(): Promise<Map<string, ScheduleState>> {
+    return new Map();
+  }
   async insertSnapshot(snapshot: SnapshotInsert) { this.snapshots.push(snapshot); }
+  async insertSnapshots(snapshots: SnapshotInsert[]) { this.snapshots.push(...snapshots); }
+  async archiveInactiveSnapshots() { return { hourly: 0, daily: 0 }; }
   async acquireLease() {
     if (this.lease) return false;
     this.lease = true;
@@ -31,7 +36,7 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('collect', () => {
-  it('collects the highest comment-to-like dynamic and writes a success snapshot', async () => {
+  it('collects all dynamics on the first page and writes snapshots per target', async () => {
     const store = new FakeStore();
     const calls: string[] = [];
     const result = await collect(store, {
@@ -58,9 +63,13 @@ describe('collect', () => {
 
     expect(result).toBe(true);
     expect(calls).toHaveLength(3);
-    expect(store.snapshots).toEqual([
-      expect.objectContaining({ accountId: 1, statusCode: 'ok', targetId: 'high', commentCount: 8, likeCount: 4 }),
-    ]);
+    expect(store.snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ accountId: 1, statusCode: 'ok', targetId: 'low', commentCount: 1, likeCount: 10 }),
+        expect.objectContaining({ accountId: 1, statusCode: 'ok', targetId: 'high', commentCount: 8, likeCount: 4 }),
+      ]),
+    );
+    expect(store.snapshots).toHaveLength(2);
   });
 
   it('reuses cached keys after a nav 412 and records failures without retrying', async () => {

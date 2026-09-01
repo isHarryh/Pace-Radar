@@ -1,3 +1,4 @@
+import { deriveStatus } from '@pace-radar/shared';
 import type { Account } from '@pace-radar/shared';
 
 export interface SnapshotRow {
@@ -34,15 +35,14 @@ export interface SeriesPoint {
   ratio_c_l: number;
 }
 
-function placeholders(ids: number[]): string {
+function placeholders<T>(ids: T[]): string {
   return ids.map(() => '?').join(',');
 }
 
-function latestTargetCte(ph: string): string {
-  return `SELECT account_id, target_id FROM (
-    SELECT account_id, target_id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY updated_at DESC, id DESC) AS rn
-    FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-  ) WHERE rn = 1`;
+function initMap<K, V>(keys: K[], init: () => V): Map<K, V> {
+  const m = new Map<K, V>();
+  for (const k of keys) m.set(k, init());
+  return m;
 }
 
 export async function listAccounts(db: D1Database): Promise<AccountRow[]> {
@@ -117,87 +117,6 @@ export async function series(
   return results;
 }
 
-export async function recentRatiosBatch(db: D1Database, accountIds: number[]): Promise<Map<number, number[]>> {
-  const map = new Map<number, number[]>();
-  for (const id of accountIds) map.set(id, []);
-  if (accountIds.length === 0) return map;
-  const ph = placeholders(accountIds);
-  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
-    ranked AS (
-      SELECT s.account_id, s.ratio_c_l, s.updated_at, s.id,
-             ROW_NUMBER() OVER (PARTITION BY s.account_id ORDER BY s.updated_at DESC, s.id DESC) AS rn
-      FROM snapshots s
-      JOIN latest_target lt ON lt.account_id = s.account_id AND lt.target_id = s.target_id
-      WHERE s.status_code = 'ok' AND s.account_id IN (${ph})
-    )
-    SELECT account_id, ratio_c_l, updated_at, id FROM ranked WHERE rn <= 10 ORDER BY account_id ASC, updated_at ASC, id ASC`;
-  const { results } = await db
-    .prepare(sql)
-    .bind(...accountIds, ...accountIds)
-    .all<{ account_id: number; ratio_c_l: number; updated_at: string; id: number }>();
-  for (const row of results) map.get(row.account_id)!.push(row.ratio_c_l);
-  return map;
-}
-
-export async function latestSnapshotsBatch(
-  db: D1Database,
-  accountIds: number[],
-  limit: number,
-): Promise<Map<number, SnapshotRow[]>> {
-  const map = new Map<number, SnapshotRow[]>();
-  for (const id of accountIds) map.set(id, []);
-  if (accountIds.length === 0) return map;
-  const ph = placeholders(accountIds);
-  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
-    ranked AS (
-      SELECT s.account_id, s.comment_count, s.like_count, s.share_count, s.ratio_c_l, s.updated_at, s.id,
-             ROW_NUMBER() OVER (PARTITION BY s.account_id ORDER BY s.updated_at DESC, s.id DESC) AS rn
-      FROM snapshots s
-      JOIN latest_target lt ON lt.account_id = s.account_id AND lt.target_id = s.target_id
-      WHERE s.status_code = 'ok' AND s.account_id IN (${ph})
-    )
-    SELECT account_id, comment_count, like_count, share_count, ratio_c_l, updated_at FROM ranked WHERE rn <= ? ORDER BY account_id ASC, updated_at ASC, id ASC`;
-  const { results } = await db
-    .prepare(sql)
-    .bind(...accountIds, ...accountIds, limit)
-    .all<{ account_id: number } & SnapshotRow>();
-  for (const row of results) {
-    const { account_id, ...snap } = row as { account_id: number } & SnapshotRow;
-    map.get(account_id)!.push(snap);
-  }
-  return map;
-}
-
-export async function seriesBatch(
-  db: D1Database,
-  accountIds: number[],
-  bucketSeconds: number,
-  offset: string,
-): Promise<Map<number, SeriesPoint[]>> {
-  const map = new Map<number, SeriesPoint[]>();
-  for (const id of accountIds) map.set(id, []);
-  if (accountIds.length === 0) return map;
-  const ph = placeholders(accountIds);
-  const sql = `WITH latest_target AS (${latestTargetCte(ph)}),
-    bucketed AS (
-      SELECT s.account_id, s.comment_count, s.like_count, s.ratio_c_l, s.updated_at, s.id,
-             ROW_NUMBER() OVER (PARTITION BY s.account_id, CAST(CAST(strftime('%s', s.updated_at) AS INTEGER) / ? AS INTEGER) ORDER BY s.updated_at DESC, s.id DESC) AS rn
-      FROM snapshots s
-      JOIN latest_target lt ON lt.account_id = s.account_id AND lt.target_id = s.target_id
-      WHERE s.status_code = 'ok' AND s.account_id IN (${ph}) AND s.updated_at >= datetime('now', ?)
-    )
-    SELECT account_id, comment_count, like_count, ratio_c_l, updated_at FROM bucketed WHERE rn = 1 ORDER BY account_id ASC, updated_at ASC`;
-  const { results } = await db
-    .prepare(sql)
-    .bind(...accountIds, bucketSeconds, ...accountIds, offset)
-    .all<{ account_id: number } & SeriesPoint>();
-  for (const row of results) {
-    const { account_id, ...pt } = row as { account_id: number } & SeriesPoint;
-    map.get(account_id)!.push(pt);
-  }
-  return map;
-}
-
 export async function requestLogs(db: D1Database, limit: number): Promise<RequestLogRow[]> {
   const { results } = await db
     .prepare(
@@ -210,3 +129,121 @@ export async function requestLogs(db: D1Database, limit: number): Promise<Reques
     .all<RequestLogRow>();
   return results;
 }
+
+// ---------- Multi-target helpers for full-page tracking ----------
+
+export async function getActiveTargetIds(db: D1Database, accountId: number, threshold: number): Promise<string[]> {
+  const map = await getActiveTargetsBatch(db, [{ id: accountId, threshold } as PublicAccountRow]);
+  return map.get(accountId) ?? [];
+}
+
+export async function getRecentRatiosByTargets(
+  db: D1Database,
+  accountId: number,
+  targetIds: string[],
+): Promise<Map<string, number[]>> {
+  const map = initMap(targetIds, () => [] as number[]);
+  if (targetIds.length === 0) return map;
+  const ph = placeholders(targetIds);
+  const sql = `WITH ranked AS (
+      SELECT target_id, ratio_c_l,
+             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
+      FROM snapshots WHERE account_id = ? AND target_id IN (${ph}) AND status_code = 'ok'
+    )
+    SELECT target_id, ratio_c_l FROM ranked WHERE rn <= 10 ORDER BY target_id, rn DESC`;
+  const { results } = await db.prepare(sql).bind(accountId, ...targetIds).all<{ target_id: string; ratio_c_l: number }>();
+  for (const row of results) map.get(row.target_id)!.push(row.ratio_c_l);
+  return map;
+}
+
+export async function getActiveTargetsBatch(
+  db: D1Database,
+  accounts: PublicAccountRow[],
+): Promise<Map<number, string[]>> {
+  const map = initMap(accounts.map((a) => a.id), () => [] as string[]);
+  if (accounts.length === 0) return map;
+  const accountIds = accounts.map((a) => a.id);
+  const ph = placeholders(accountIds);
+  const sql = `WITH ranked AS (
+      SELECT account_id, target_id, ratio_c_l,
+             ROW_NUMBER() OVER (PARTITION BY account_id, target_id ORDER BY updated_at DESC, id DESC) AS rn
+      FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
+    ),
+    recent AS (
+      SELECT account_id, target_id, ratio_c_l, rn FROM ranked WHERE rn <= 10
+    )
+    SELECT account_id, target_id, ratio_c_l FROM recent ORDER BY account_id, target_id, rn DESC`;
+  const { results } = await db.prepare(sql).bind(...accountIds).all<{ account_id: number; target_id: string; ratio_c_l: number }>();
+  const grouped = new Map<string, number[]>();
+  for (const row of results) {
+    const key = `${row.account_id}:${row.target_id}`;
+    const arr = grouped.get(key);
+    if (arr) arr.push(row.ratio_c_l);
+    else grouped.set(key, [row.ratio_c_l]);
+  }
+  const thresholdMap = new Map(accounts.map((a) => [a.id, a.threshold] as const));
+  for (const [key, ratios] of grouped) {
+    const sep = key.indexOf(':');
+    const aidStr = key.slice(0, sep);
+    const tid = key.slice(sep + 1);
+    const aid = Number(aidStr);
+    const threshold = thresholdMap.get(aid)!;
+    if (deriveStatus(ratios, threshold) !== 'normal') {
+      map.get(aid)!.push(tid);
+    }
+  }
+  return map;
+}
+
+export async function latestSnapshotsByTargets(
+  db: D1Database,
+  accountId: number,
+  targetIds: string[],
+  limit: number,
+): Promise<Map<string, SnapshotRow[]>> {
+  const map = initMap(targetIds, () => [] as SnapshotRow[]);
+  if (targetIds.length === 0) return map;
+  const ph = placeholders(targetIds);
+  const sql = `SELECT target_id, comment_count, like_count, share_count, ratio_c_l, updated_at FROM (
+      SELECT target_id, comment_count, like_count, share_count, ratio_c_l, updated_at,
+             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
+      FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id IN (${ph})
+    ) WHERE rn <= ? ORDER BY target_id ASC, updated_at ASC`;
+  const { results } = await db
+    .prepare(sql)
+    .bind(accountId, ...targetIds, limit)
+    .all<{ target_id: string } & SnapshotRow>();
+  for (const row of results) {
+    const { target_id, ...snap } = row as { target_id: string } & SnapshotRow;
+    map.get(target_id)!.push(snap);
+  }
+  return map;
+}
+
+export async function seriesByTargets(
+  db: D1Database,
+  accountId: number,
+  targetIds: string[],
+  bucketSeconds: number,
+  offset: string,
+): Promise<Map<string, SeriesPoint[]>> {
+  const map = initMap(targetIds, () => [] as SeriesPoint[]);
+  if (targetIds.length === 0) return map;
+  const ph = placeholders(targetIds);
+  const sql = `SELECT target_id, comment_count, like_count, ratio_c_l, updated_at FROM (
+      SELECT target_id, comment_count, like_count, ratio_c_l, updated_at,
+             ROW_NUMBER() OVER (PARTITION BY target_id, CAST(CAST(strftime('%s', updated_at) AS INTEGER) / ? AS INTEGER) ORDER BY updated_at DESC, id DESC) AS rn
+      FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id IN (${ph}) AND updated_at >= datetime('now', ?)
+    ) WHERE rn = 1 ORDER BY target_id ASC, updated_at ASC`;
+  const { results } = await db
+    .prepare(sql)
+    .bind(bucketSeconds, accountId, ...targetIds, offset)
+    .all<{ target_id: string } & SeriesPoint>();
+  for (const row of results) {
+    const { target_id, ...pt } = row as { target_id: string } & SeriesPoint;
+    map.get(target_id)!.push(pt);
+  }
+  return map;
+}
+
+

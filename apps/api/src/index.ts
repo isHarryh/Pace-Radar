@@ -3,15 +3,14 @@ import { cors } from 'hono/cors';
 import { deriveStatus, parseDbTime, type PaceStatus } from '@pace-radar/shared';
 import { admin } from './admin';
 import {
-  currentTargetId,
   getAccountByMid,
+  getActiveTargetIds,
+  getActiveTargetsBatch,
+  getRecentRatiosByTargets,
   latestSnapshots,
-  latestSnapshotsBatch,
+  latestSnapshotsByTargets,
   listPublicAccounts,
-  recentRatios,
-  recentRatiosBatch,
-  series,
-  seriesBatch,
+  seriesByTargets,
   type PublicAccountRow,
   type SnapshotRow,
 } from './db';
@@ -35,6 +34,10 @@ interface AccountView {
   name: string;
   threshold: number;
   status: PaceStatus;
+  activeCount: number;
+  maxComment: number | null;
+  maxRatio: number | null;
+  totalGrowth: { comments: number; windowMin: number } | null;
   latest: {
     commentCount: number;
     likeCount: number;
@@ -43,6 +46,18 @@ interface AccountView {
     updatedAt: string;
   } | null;
   perMinute: { comments: number; windowMin: number } | null;
+}
+
+interface TargetView {
+  targetId: string;
+  url: string;
+  commentCount: number;
+  likeCount: number;
+  shareCount: number;
+  ratio: number;
+  updatedAt: string;
+  perMinute: { comments: number; windowMin: number } | null;
+  status: PaceStatus;
 }
 
 class NotFoundError extends Error {
@@ -98,25 +113,128 @@ function toGrowthPoints(points: { updated_at: string; comment_count: number }[])
   });
 }
 
-function toAccountView(account: PublicAccountRow, ratios: number[], rows: SnapshotRow[]): AccountView {
+function targetUrl(targetId: string): string {
+  return `https://t.bilibili.com/${targetId}`;
+}
+
+function toTargetView(targetId: string, ratios: number[], rows: SnapshotRow[], threshold: number): TargetView {
+  const latest = toLatestView(rows);
+  return {
+    targetId,
+    url: targetUrl(targetId),
+    commentCount: latest?.commentCount ?? 0,
+    likeCount: latest?.likeCount ?? 0,
+    shareCount: latest?.shareCount ?? 0,
+    ratio: latest?.ratio ?? 0,
+    updatedAt: latest?.updatedAt ?? '',
+    perMinute: toPerMinute(rows),
+    status: deriveStatus(ratios, threshold),
+  };
+}
+
+async function fetchActiveTargetViews(
+  db: D1Database,
+  account: PublicAccountRow,
+  activeIds: string[],
+): Promise<TargetView[]> {
+  if (activeIds.length === 0) return [];
+  const [snapshotsMap, ratiosMap] = await Promise.all([
+    latestSnapshotsByTargets(db, account.id, activeIds, 2),
+    getRecentRatiosByTargets(db, account.id, activeIds),
+  ]);
+  return activeIds.map((tid) => toTargetView(tid, ratiosMap.get(tid) ?? [], snapshotsMap.get(tid) ?? [], account.threshold));
+}
+
+async function buildAggregatedAccountView(
+  db: D1Database,
+  account: PublicAccountRow,
+  prefetchedActiveIds?: string[],
+): Promise<AccountView> {
+  const activeIds = prefetchedActiveIds ?? (await getActiveTargetIds(db, account.id, account.threshold));
+  if (activeIds.length === 0) {
+    return {
+      id: account.id,
+      mid: account.mid,
+      name: account.name,
+      threshold: account.threshold,
+      status: 'normal',
+      activeCount: 0,
+      maxComment: null,
+      maxRatio: null,
+      totalGrowth: null,
+      latest: null,
+      perMinute: null,
+    };
+  }
+  const targetViews = await fetchActiveTargetViews(db, account, activeIds);
+  // Aggregate
+  let maxComment: number | null = null;
+  let maxRatio: number | null = null;
+  let totalGrowthValue = 0;
+  let hasGrowth = false;
+  let overallStatus: PaceStatus = 'normal';
+  let latestForView: AccountView['latest'] = null;
+  let maxCommentTarget: TargetView | null = null;
+  for (const tv of targetViews) {
+    if (maxComment === null || tv.commentCount > maxComment) {
+      maxComment = tv.commentCount;
+      maxCommentTarget = tv;
+    }
+    if (maxRatio === null || tv.ratio > maxRatio) maxRatio = tv.ratio;
+    if (tv.perMinute) {
+      totalGrowthValue += tv.perMinute.comments;
+      hasGrowth = true;
+    }
+    if (tv.status === 'active') overallStatus = 'active';
+    else if (tv.status === 'watching' && overallStatus !== 'active') overallStatus = 'watching';
+  }
+  if (maxCommentTarget) {
+    latestForView = {
+      commentCount: maxCommentTarget.commentCount,
+      likeCount: maxCommentTarget.likeCount,
+      shareCount: maxCommentTarget.shareCount,
+      ratio: maxCommentTarget.ratio,
+      updatedAt: maxCommentTarget.updatedAt,
+    };
+  }
   return {
     id: account.id,
     mid: account.mid,
     name: account.name,
     threshold: account.threshold,
-    status: deriveStatus(ratios, account.threshold),
-    latest: toLatestView(rows),
-    perMinute: toPerMinute(rows),
+    status: overallStatus,
+    activeCount: activeIds.length,
+    maxComment,
+    maxRatio,
+    totalGrowth: hasGrowth ? { comments: totalGrowthValue, windowMin: 1 } : null,
+    latest: latestForView,
+    perMinute: hasGrowth ? { comments: totalGrowthValue, windowMin: 1 } : null,
   };
 }
 
-async function buildAccountView(db: D1Database, account: PublicAccountRow): Promise<AccountView> {
-  const targetId = await currentTargetId(db, account.id);
-  const [ratios, rows] = await Promise.all([
-    recentRatios(db, account.id, targetId),
-    latestSnapshots(db, account.id, 2, targetId),
-  ]);
-  return toAccountView(account, ratios, rows);
+async function buildOverviewSpark(db: D1Database, account: PublicAccountRow, activeIds: string[]): Promise<{ t: string; growth: number }[]> {
+  if (activeIds.length === 0) return [];
+  const seriesMap = await seriesByTargets(db, account.id, activeIds, SPARK_BUCKET_SECONDS, '-24 hours');
+  // Aggregate hourly total growth: group by hour bucket string (YYYY-MM-DD HH)
+  const bucketMap = new Map<string, { growthSum: number; t: string }>();
+  for (const tid of activeIds) {
+    const points = seriesMap.get(tid) ?? [];
+    const growths = toGrowthPoints(points);
+    for (let i = 1; i < growths.length; i++) {
+      const g = growths[i]!;
+      const hourKey = g.t.slice(0, 13); // YYYY-MM-DD HH
+      const existing = bucketMap.get(hourKey);
+      if (existing) {
+        existing.growthSum += g.growth;
+        // keep earliest t for that hour? use latest
+        if (g.t > existing.t) existing.t = g.t;
+      } else {
+        bucketMap.set(hourKey, { growthSum: g.growth, t: g.t });
+      }
+    }
+  }
+  const sorted = Array.from(bucketMap.values()).sort((a, b) => a.t.localeCompare(b.t));
+  return sorted.map((v) => ({ t: v.t, growth: v.growthSum }));
 }
 
 async function requirePublicAccount(db: D1Database, mid: number): Promise<PublicAccountRow> {
@@ -140,6 +258,23 @@ function resolveSeriesParams(c: { req: { query: (n: string) => string | undefine
   return { range, resolution, offset, bucket };
 }
 
+async function handleAccountRoute(
+  c: Parameters<typeof cachedJson>[0],
+  handler: (account: PublicAccountRow) => Promise<unknown>,
+): Promise<Response> {
+  const mid = parseMid(c as { req: { param: (n: string) => string } });
+  if (mid === null) return badRequest(c as { json: (b: unknown, s: number, h?: Record<string, string>) => Response }, 'invalid mid');
+  try {
+    return await cachedJson(c, `GET:${(c as { req: { url: string } }).req.url}`, async () => {
+      const account = await requirePublicAccount((c as { env: Env }).env.DB, mid);
+      return handler(account);
+    });
+  } catch (e) {
+    if (e instanceof NotFoundError) return notFound(c as { json: (b: unknown, s: number, h?: Record<string, string>) => Response }, 'account not found');
+    throw e;
+  }
+}
+
 app.get('/api/health', (c) => cachedJson(c, `GET:${c.req.url}`, async () => ({ ok: true })));
 
 app.get('/api/accounts/:mid/avatar', async (c) => {
@@ -157,36 +292,29 @@ app.get('/api/accounts', (c) =>
   cachedJson(c, `GET:${c.req.url}`, async () => {
     const accounts = await listPublicAccounts(c.env.DB);
     if (accounts.length === 0) return [];
-    const ids = accounts.map((a) => a.id);
-    const [ratiosMap, snapshotsMap, sparkMap] = await Promise.all([
-      recentRatiosBatch(c.env.DB, ids),
-      latestSnapshotsBatch(c.env.DB, ids, 2),
-      seriesBatch(c.env.DB, ids, SPARK_BUCKET_SECONDS, '-24 hours'),
-    ]);
-    return accounts.map((account) => {
-      const ratios = ratiosMap.get(account.id) ?? [];
-      const rows = snapshotsMap.get(account.id) ?? [];
-      const points = sparkMap.get(account.id) ?? [];
-      const growth = toGrowthPoints(points);
-      const spark = growth.length > 1 ? growth.slice(1) : [];
-      return { ...toAccountView(account, ratios, rows), spark };
-    });
+    const activeMap = await getActiveTargetsBatch(c.env.DB, accounts);
+    const views = await Promise.all(
+      accounts.map(async (account) => {
+        const activeIds = activeMap.get(account.id) ?? [];
+        const view = await buildAggregatedAccountView(c.env.DB, account, activeIds);
+        const spark = await buildOverviewSpark(c.env.DB, account, activeIds);
+        return { ...view, spark };
+      }),
+    );
+    return views;
   }),
 );
 
-app.get('/api/accounts/:mid', async (c) => {
-  const mid = parseMid(c);
-  if (mid === null) return badRequest(c, 'invalid mid');
-  try {
-    return await cachedJson(c, `GET:${c.req.url}`, async () => {
-      const account = await requirePublicAccount(c.env.DB, mid);
-      return buildAccountView(c.env.DB, account);
-    });
-  } catch (e) {
-    if (e instanceof NotFoundError) return notFound(c, 'account not found');
-    throw e;
-  }
-});
+async function getActiveTargetViews(db: D1Database, account: PublicAccountRow): Promise<TargetView[]> {
+  const activeIds = await getActiveTargetIds(db, account.id, account.threshold);
+  return fetchActiveTargetViews(db, account, activeIds);
+}
+
+app.get('/api/accounts/:mid', (c) => handleAccountRoute(c, (account) => buildAggregatedAccountView((c as unknown as { env: Env }).env.DB, account)));
+
+app.get('/api/accounts/:mid/targets', (c) =>
+  handleAccountRoute(c, (account) => getActiveTargetViews((c as unknown as { env: Env }).env.DB, account)),
+);
 
 app.get('/api/accounts/:mid/latest', async (c) => {
   const mid = parseMid(c);
@@ -206,18 +334,20 @@ app.get('/api/accounts/:mid/latest', async (c) => {
 });
 
 app.get('/api/accounts/:mid/series', async (c) => {
-  const mid = parseMid(c);
-  if (mid === null) return badRequest(c, 'invalid mid');
   const params = resolveSeriesParams(c);
   if (!params) return badRequest(c, 'unsupported range or resolution');
-  try {
-    return await cachedJson(c, `GET:${c.req.url}`, async () => {
-      const account = await requirePublicAccount(c.env.DB, mid);
-      const points = await series(c.env.DB, account.id, params.bucket, params.offset);
+  return handleAccountRoute(c, async (account) => {
+    const activeIds = await getActiveTargetIds((c as unknown as { env: Env }).env.DB, account.id, account.threshold);
+    if (activeIds.length === 0) {
+      return { range: params.range, resolution: params.resolution, series: [] as { targetId: string; url: string; points: { t: string; commentCount: number; ratio: number; growth: number }[] }[] };
+    }
+    const seriesMap = await seriesByTargets((c as unknown as { env: Env }).env.DB, account.id, activeIds, params.bucket, params.offset);
+    const series = activeIds.map((tid) => {
+      const points = seriesMap.get(tid) ?? [];
       const growthPoints = toGrowthPoints(points);
       return {
-        range: params.range,
-        resolution: params.resolution,
+        targetId: tid,
+        url: targetUrl(tid),
         points: points.map((p, i) => ({
           t: p.updated_at,
           commentCount: p.comment_count,
@@ -226,10 +356,8 @@ app.get('/api/accounts/:mid/series', async (c) => {
         })),
       };
     });
-  } catch (e) {
-    if (e instanceof NotFoundError) return notFound(c, 'account not found');
-    throw e;
-  }
+    return { range: params.range, resolution: params.resolution, series };
+  });
 });
 
 app.route('/api/admin', admin);

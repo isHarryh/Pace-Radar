@@ -40,7 +40,9 @@ function Sparkline({ points }: { points: { t: string; growth: number }[] }) {
 }
 
 export function AccountCard({ account }: { account: AccountView }) {
-  const { latest, perMinute } = account;
+  const maxComment = account.maxComment ?? account.latest?.commentCount ?? null;
+  const totalGrowth = account.totalGrowth ?? account.perMinute;
+  const maxRatio = account.maxRatio ?? account.latest?.ratio ?? null;
   return (
     <a
       href={`#/accounts/${account.mid}`}
@@ -51,26 +53,31 @@ export function AccountCard({ account }: { account: AccountView }) {
           <Avatar accountId={account.mid} name={account.name} size={32} />
           <h3 className="truncate text-sm font-medium text-ink sm:text-[15px]">{account.name}</h3>
         </div>
-        <StatusBadge status={account.status} />
+        <div className="flex items-center gap-1.5">
+          {account.activeCount > 0 && (
+            <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">{account.activeCount} 活跃</span>
+          )}
+          <StatusBadge status={account.status} />
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         <div className="min-w-0">
-          <p className="truncate text-xl font-semibold text-ink sm:text-2xl">{latest ? formatCount(latest.commentCount) : '—'}</p>
-          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">评论楼层</p>
+          <p className="truncate text-xl font-semibold text-ink sm:text-2xl">{maxComment !== null ? formatCount(maxComment) : '—'}</p>
+          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">最高楼层</p>
         </div>
         <div className="min-w-0">
-          <p className="truncate text-base font-medium text-ink sm:text-lg">{perMinute ? `${perMinute.comments.toFixed(1)}/分` : '—'}</p>
-          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">盖楼速度</p>
+          <p className="truncate text-base font-medium text-ink sm:text-lg">{totalGrowth ? `${totalGrowth.comments.toFixed(1)}/分` : '—'}</p>
+          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">总盖楼速度</p>
         </div>
         <div className="min-w-0 text-right sm:text-left">
-          <p className="truncate text-base font-medium text-ink sm:text-lg">{latest ? latest.ratio.toFixed(1) : '—'}</p>
-          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">评赞比</p>
+          <p className="truncate text-base font-medium text-ink sm:text-lg">{maxRatio !== null ? maxRatio.toFixed(1) : '—'}</p>
+          <p className="mt-0.5 text-[11px] leading-none text-muted sm:text-xs">最大评赞比</p>
         </div>
       </div>
       {account.spark && account.spark.length > 1 ? (
         <Sparkline points={account.spark} />
       ) : (
-        <p className="py-2 text-center text-xs text-muted">暂无数据</p>
+        <p className="py-2 text-center text-xs text-muted">{account.activeCount === 0 ? '暂无活跃动态' : '暂无数据'}</p>
       )}
     </a>
   );

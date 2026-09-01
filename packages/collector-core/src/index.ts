@@ -3,3 +3,4 @@ export * from './collect.js';
 export * from './config.js';
 export * from './errors.js';
 export * from './ports.js';
+export * from './base-store.js';

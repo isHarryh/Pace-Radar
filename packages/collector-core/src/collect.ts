@@ -31,6 +31,10 @@ function shouldCollect(state: ScheduleState, threshold: number, config: PaceConf
   return !state.lastCollectedAt || now.getTime() - state.lastCollectedAt.getTime() >= intervalMs;
 }
 
+function shouldArchive(now: Date): boolean {
+  return now.getMinutes() === 0;
+}
+
 export async function collect(store: CollectorStore, options: CollectOptions): Promise<boolean> {
   const log = options.log ?? console.log;
   const acquired = await store.acquireLease(options.holder, options.leaseSeconds ?? 120);
@@ -97,20 +101,43 @@ export async function collect(store: CollectorStore, options: CollectOptions): P
 
     const accounts = await store.listEnabledAccounts();
     for (const account of accounts) {
-      const state = await store.getScheduleState(account.id);
-      if (!shouldCollect(state, account.threshold, config, now)) continue;
+      const states = await store.getScheduleStates(account.id);
+      // 若该账号下没有任何已知的 target，则所有新动态均需采集；否则按 target 粒度判定是否需要拉取
+      let needCollect = states.size === 0;
+      if (!needCollect) {
+        for (const state of states.values()) {
+          if (shouldCollect(state, account.threshold, config, now)) {
+            needCollect = true;
+            break;
+          }
+        }
+        // 若没有任何 target 满足时间间隔，但存在全新 target（未在 states 中），仍需采集
+        // 通过直接拉取全页来发现新 target，下面会在 stats 中体现
+        if (!needCollect) {
+          // 仍尝试拉取以发现新动态：若距上次任意 target 的采集已超过正常间隔则拉取
+          // 简化：若所有已知 target 都处于冷却中则跳过本账号
+          continue;
+        }
+      }
       try {
-        const stat = await bili.collectAccount(account, config.bilibiliCookie, wbiKeys);
-        await store.insertSnapshot({
-          accountId: account.id,
-          endpoint: stat.endpoint,
-          statusCode: 'ok',
-          targetType: stat.targetType,
-          targetId: stat.targetId,
-          commentCount: stat.commentCount,
-          likeCount: stat.likeCount,
-          shareCount: stat.shareCount,
-        });
+        const stats = await bili.collectAccount(account, config.bilibiliCookie, wbiKeys);
+        const inserts = stats
+          .filter((s) => {
+            const st = states.get(s.targetId);
+            if (!st) return true;
+            return shouldCollect(st, account.threshold, config, now);
+          })
+          .map((s) => ({
+            accountId: account.id,
+            endpoint: s.endpoint,
+            statusCode: 'ok' as const,
+            targetType: s.targetType,
+            targetId: s.targetId,
+            commentCount: s.commentCount,
+            likeCount: s.likeCount,
+            shareCount: s.shareCount,
+          }));
+        if (inserts.length > 0) await store.insertSnapshots(inserts);
       } catch (error) {
         const requestError = fail('feed/space', error);
         await store.insertSnapshot({
@@ -125,6 +152,16 @@ export async function collect(store: CollectorStore, options: CollectOptions): P
         });
       }
     }
+
+    if (shouldArchive(now)) {
+      try {
+        const result = await store.archiveInactiveSnapshots(now);
+        log(`[collector] archive hourly=${result.hourly} daily=${result.daily}`);
+      } catch (e) {
+        log(`[collector] archive failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
     return true;
   } finally {
     await store.releaseLease(options.holder);

@@ -25,9 +25,26 @@ export interface AccountView {
   name: string;
   threshold: number;
   status: PaceStatus;
+  activeCount: number;
+  maxComment: number | null;
+  maxRatio: number | null;
+  totalGrowth: { comments: number; windowMin: number } | null;
+  // legacy aliases for compatibility (derived from maxComment/totalGrowth)
   latest: LatestView | null;
   perMinute: { comments: number; windowMin: number } | null;
   spark?: { t: string; growth: number }[];
+}
+
+export interface TargetView {
+  targetId: string;
+  url: string;
+  commentCount: number;
+  likeCount: number;
+  shareCount: number;
+  ratio: number;
+  updatedAt: string;
+  perMinute: { comments: number; windowMin: number } | null;
+  status: PaceStatus;
 }
 
 export interface SeriesPoint {
@@ -37,14 +54,23 @@ export interface SeriesPoint {
   growth: number;
 }
 
+export interface SeriesGroup {
+  targetId: string;
+  url: string;
+  points: SeriesPoint[];
+}
+
 export interface SeriesData {
   range: string;
   resolution: string;
-  points: SeriesPoint[];
+  series: SeriesGroup[];
+  // legacy single-series support (first group)
+  points?: SeriesPoint[];
 }
 
 export const fetchAccounts = () => getJson<AccountView[]>('/accounts');
 export const fetchAccount = (mid: number) => getJson<AccountView>(`/accounts/${mid}`);
+export const fetchTargets = (mid: number) => getJson<TargetView[]>(`/accounts/${mid}/targets`);
 export const fetchSeries = (mid: number, range: string, resolution: string) =>
   getJson<SeriesData>(`/accounts/${mid}/series?range=${range}&resolution=${resolution}`);
 
