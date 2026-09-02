@@ -142,14 +142,23 @@ export async function getRecentRatiosByTargets(
 ): Promise<Map<string, number[]>> {
   const map = initMap(targetIds, () => [] as number[]);
   if (targetIds.length === 0) return map;
-  const ph = placeholders(targetIds);
-  const sql = `WITH ranked AS (
-      SELECT target_id, ratio_c_l,
-             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
-      FROM snapshots WHERE account_id = ? AND target_id IN (${ph}) AND status_code = 'ok'
-    )
-    SELECT target_id, ratio_c_l FROM ranked WHERE rn <= 10 ORDER BY target_id, rn DESC`;
-  const { results } = await db.prepare(sql).bind(accountId, ...targetIds).all<{ target_id: string; ratio_c_l: number }>();
+  const chunkSize = 5;
+  const allRows: { target_id: string; ratio_c_l: number }[] = [];
+  for (let i = 0; i < targetIds.length; i += chunkSize) {
+    const chunk = targetIds.slice(i, i + chunkSize);
+    const parts: string[] = [];
+    const params: unknown[] = [];
+    for (const tid of chunk) {
+      parts.push(
+        `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 10)`,
+      );
+      params.push(accountId, tid);
+    }
+    const sql = parts.join(' UNION ALL ');
+    const { results } = await db.prepare(sql).bind(...params).all<{ target_id: string; ratio_c_l: number }>();
+    allRows.push(...results);
+  }
+  const results = allRows;
   for (const row of results) map.get(row.target_id)!.push(row.ratio_c_l);
   return map;
 }
@@ -160,36 +169,43 @@ export async function getActiveTargetsBatch(
 ): Promise<Map<number, string[]>> {
   const map = initMap(accounts.map((a) => a.id), () => [] as string[]);
   if (accounts.length === 0) return map;
-  const accountIds = accounts.map((a) => a.id);
-  const ph = placeholders(accountIds);
-  const sql = `WITH ranked AS (
-      SELECT account_id, target_id, ratio_c_l,
-             ROW_NUMBER() OVER (PARTITION BY account_id, target_id ORDER BY updated_at DESC, id DESC) AS rn
-      FROM snapshots WHERE account_id IN (${ph}) AND status_code = 'ok'
-    ),
-    recent AS (
-      SELECT account_id, target_id, ratio_c_l, rn FROM ranked WHERE rn <= 10
-    )
-    SELECT account_id, target_id, ratio_c_l FROM recent ORDER BY account_id, target_id, rn DESC`;
-  const { results } = await db.prepare(sql).bind(...accountIds).all<{ account_id: number; target_id: string; ratio_c_l: number }>();
-  const grouped = new Map<string, number[]>();
-  for (const row of results) {
-    const key = `${row.account_id}:${row.target_id}`;
-    const arr = grouped.get(key);
-    if (arr) arr.push(row.ratio_c_l);
-    else grouped.set(key, [row.ratio_c_l]);
-  }
-  const thresholdMap = new Map(accounts.map((a) => [a.id, a.threshold] as const));
-  for (const [key, ratios] of grouped) {
-    const sep = key.indexOf(':');
-    const aidStr = key.slice(0, sep);
-    const tid = key.slice(sep + 1);
-    const aid = Number(aidStr);
-    const threshold = thresholdMap.get(aid)!;
-    if (deriveStatus(ratios, threshold) !== 'normal') {
-      map.get(aid)!.push(tid);
-    }
-  }
+  await Promise.all(
+    accounts.map(async (account) => {
+      const distinct = await db
+        .prepare(`SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`)
+        .bind(account.id)
+        .all<{ target_id: string }>();
+      const targetIds = distinct.results.map((r) => r.target_id);
+      if (targetIds.length === 0) return;
+      const chunkSize = 5;
+      const allRows: { target_id: string; ratio_c_l: number }[] = [];
+      for (let i = 0; i < targetIds.length; i += chunkSize) {
+        const chunk = targetIds.slice(i, i + chunkSize);
+        const parts: string[] = [];
+        const params: unknown[] = [];
+        for (const tid of chunk) {
+          parts.push(
+            `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 10)`,
+          );
+          params.push(account.id, tid);
+        }
+        const sql = parts.join(' UNION ALL ');
+        const { results } = await db.prepare(sql).bind(...params).all<{ target_id: string; ratio_c_l: number }>();
+        allRows.push(...results);
+      }
+      const grouped = new Map<string, number[]>();
+      for (const row of allRows) {
+        const arr = grouped.get(row.target_id);
+        if (arr) arr.push(row.ratio_c_l);
+        else grouped.set(row.target_id, [row.ratio_c_l]);
+      }
+      for (const [tid, ratios] of grouped) {
+        if (deriveStatus(ratios, account.threshold) !== 'normal') {
+          map.get(account.id)!.push(tid);
+        }
+      }
+    }),
+  );
   return map;
 }
 
@@ -201,17 +217,23 @@ export async function latestSnapshotsByTargets(
 ): Promise<Map<string, SnapshotRow[]>> {
   const map = initMap(targetIds, () => [] as SnapshotRow[]);
   if (targetIds.length === 0) return map;
-  const ph = placeholders(targetIds);
-  const sql = `SELECT target_id, comment_count, like_count, share_count, ratio_c_l, updated_at FROM (
-      SELECT target_id, comment_count, like_count, share_count, ratio_c_l, updated_at,
-             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
-      FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id IN (${ph})
-    ) WHERE rn <= ? ORDER BY target_id ASC, updated_at ASC`;
-  const { results } = await db
-    .prepare(sql)
-    .bind(accountId, ...targetIds, limit)
-    .all<{ target_id: string } & SnapshotRow>();
-  for (const row of results) {
+  const chunkSize = 5;
+  const allRows: ({ target_id: string } & SnapshotRow)[] = [];
+  for (let i = 0; i < targetIds.length; i += chunkSize) {
+    const chunk = targetIds.slice(i, i + chunkSize);
+    const parts: string[] = [];
+    const params: unknown[] = [];
+    for (const tid of chunk) {
+      parts.push(
+        `SELECT * FROM (SELECT target_id, comment_count, like_count, share_count, ratio_c_l, updated_at FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT ?)`,
+      );
+      params.push(accountId, tid, limit);
+    }
+    const sql = `${parts.join(' UNION ALL ')} ORDER BY target_id ASC, updated_at ASC`;
+    const { results } = await db.prepare(sql).bind(...params).all<{ target_id: string } & SnapshotRow>();
+    allRows.push(...results);
+  }
+  for (const row of allRows) {
     const { target_id, ...snap } = row as { target_id: string } & SnapshotRow;
     map.get(target_id)!.push(snap);
   }
@@ -248,12 +270,29 @@ export async function fallbackLatestStats(
   db: D1Database,
   accountId: number,
 ): Promise<{ maxComment: number | null; maxRatio: number | null; latest: SnapshotRow | null }> {
-  const sql = `SELECT comment_count, like_count, share_count, ratio_c_l, updated_at FROM (
-      SELECT comment_count, like_count, share_count, ratio_c_l, updated_at,
-             ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn
-      FROM snapshots WHERE account_id = ? AND status_code = 'ok'
-    ) WHERE rn = 1`;
-  const { results } = await db.prepare(sql).bind(accountId).all<SnapshotRow>();
+  const distinct = await db
+    .prepare(`SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`)
+    .bind(accountId)
+    .all<{ target_id: string }>();
+  const targetIds = distinct.results.map((r) => r.target_id);
+  if (targetIds.length === 0) return { maxComment: null, maxRatio: null, latest: null };
+  const chunkSize = 5;
+  const allRows: SnapshotRow[] = [];
+  for (let i = 0; i < targetIds.length; i += chunkSize) {
+    const chunk = targetIds.slice(i, i + chunkSize);
+    const parts: string[] = [];
+    const params: unknown[] = [];
+    for (const tid of chunk) {
+      parts.push(
+        `SELECT * FROM (SELECT comment_count, like_count, share_count, ratio_c_l, updated_at FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 1)`,
+      );
+      params.push(accountId, tid);
+    }
+    const sql = parts.join(' UNION ALL ');
+    const { results } = await db.prepare(sql).bind(...params).all<SnapshotRow>();
+    allRows.push(...results);
+  }
+  const results = allRows;
   if (results.length === 0) return { maxComment: null, maxRatio: null, latest: null };
   let maxComment: number | null = null;
   let maxRatio: number | null = null;

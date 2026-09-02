@@ -47,21 +47,34 @@ export abstract class BaseCollectorStore implements CollectorStore {
   }
 
   async getScheduleStates(accountId: number): Promise<Map<string, ScheduleState>> {
-    const rows = await this.queryAll<{ target_id: string; ratio_c_l: number; last_at: string }>(
-      `WITH ranked AS (
-         SELECT target_id, ratio_c_l, updated_at,
-                ROW_NUMBER() OVER (PARTITION BY target_id ORDER BY updated_at DESC, id DESC) AS rn,
-                MAX(updated_at) OVER (PARTITION BY target_id) AS last_at
-         FROM snapshots WHERE account_id = ? AND status_code = 'ok'
-       )
-       SELECT target_id, ratio_c_l, last_at FROM ranked WHERE rn <= 10 ORDER BY target_id, updated_at DESC`,
+    const targets = await this.queryAll<{ target_id: string }>(
+      `SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`,
       [accountId],
     );
+    if (targets.length === 0) return new Map();
+    const chunkSize = 5;
+    const rows: { target_id: string; ratio_c_l: number; updated_at: string }[] = [];
+    for (let i = 0; i < targets.length; i += chunkSize) {
+      const chunk = targets.slice(i, i + chunkSize);
+      const unionParts: string[] = [];
+      const unionParams: unknown[] = [];
+      for (const { target_id } of chunk) {
+        unionParts.push(
+          `SELECT * FROM (SELECT target_id, ratio_c_l, updated_at FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id = ? ORDER BY updated_at DESC, id DESC LIMIT 10)`,
+        );
+        unionParams.push(accountId, target_id);
+      }
+      const chunkRows = await this.queryAll<{ target_id: string; ratio_c_l: number; updated_at: string }>(
+        `${unionParts.join(' UNION ALL ')} ORDER BY target_id, updated_at DESC`,
+        unionParams,
+      );
+      rows.push(...chunkRows);
+    }
     const grouped = new Map<string, { ratios: number[]; last_at: string }>();
     for (const r of rows) {
       const g = grouped.get(r.target_id);
       if (g) g.ratios.push(r.ratio_c_l);
-      else grouped.set(r.target_id, { ratios: [r.ratio_c_l], last_at: r.last_at });
+      else grouped.set(r.target_id, { ratios: [r.ratio_c_l], last_at: r.updated_at });
     }
     const map = new Map<string, ScheduleState>();
     for (const [targetId, { ratios, last_at }] of grouped) {
