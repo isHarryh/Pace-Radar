@@ -23,6 +23,20 @@ export interface SnapshotInsert {
   summary?: string | null;
 }
 
+export interface CollectorHeartbeat {
+  cookieMd5: string | null;
+  cookieMid: number | null;
+  cookieUname: string | null;
+  isLogin: number | null;
+  navCode: number | null;
+  valid: number | null;
+  error: string | null;
+  egressIp: string | null;
+  egressGeo: string | null;
+  cookieCheckedAt: string | null;
+  egressCheckedAt: string | null;
+}
+
 export interface CollectorStore {
   loadConfig(): Promise<PaceConfig>;
   saveWbiKeys(keys: WbiKeys): Promise<void>;
@@ -34,6 +48,8 @@ export interface CollectorStore {
   archiveInactiveSnapshots(now?: Date): Promise<{ hourly: number; daily: number }>;
   acquireLease(holder: string, durationSeconds: number): Promise<boolean>;
   releaseLease(holder: string): Promise<void>;
+  saveCollectorHeartbeat(heartbeat: CollectorHeartbeat): Promise<void>;
+  loadCollectorHeartbeat(): Promise<CollectorHeartbeat | null>;
 }
 
 export interface BiliTransport {

@@ -131,6 +131,10 @@ export interface AdminCookieInfo {
   valid: boolean | null;
   error: string | null;
   identity: { isLogin: boolean; mid: number | null; uname: string | null } | null;
+  cookieCheckedAt: string | null;
+  egressIp: string | null;
+  egressGeo: string | null;
+  egressCheckedAt: string | null;
 }
 
 export interface RequestLog {

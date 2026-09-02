@@ -231,4 +231,72 @@ export abstract class BaseCollectorStore implements CollectorStore {
   async releaseLease(holder: string): Promise<void> {
     await this.exec("DELETE FROM collector_leases WHERE name = 'global' AND holder = ?", [holder]);
   }
+
+  async saveCollectorHeartbeat(hb: import('./ports.js').CollectorHeartbeat): Promise<void> {
+    await this.exec(
+      `INSERT INTO collector_leases
+        (name, holder, expires_at, cookie_md5, cookie_mid, cookie_uname, is_login, nav_code, valid, error, egress_ip, egress_geo, cookie_checked_at, egress_checked_at, updated_at)
+       VALUES ('heartbeat', 'heartbeat', datetime('now', '+1 year'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(name) DO UPDATE SET
+         cookie_md5=excluded.cookie_md5,
+         cookie_mid=excluded.cookie_mid,
+         cookie_uname=excluded.cookie_uname,
+         is_login=excluded.is_login,
+         nav_code=excluded.nav_code,
+         valid=excluded.valid,
+         error=excluded.error,
+         egress_ip=excluded.egress_ip,
+         egress_geo=excluded.egress_geo,
+         cookie_checked_at=excluded.cookie_checked_at,
+         egress_checked_at=excluded.egress_checked_at,
+         updated_at=datetime('now')`,
+      [
+        hb.cookieMd5,
+        hb.cookieMid,
+        hb.cookieUname,
+        hb.isLogin,
+        hb.navCode,
+        hb.valid,
+        hb.error,
+        hb.egressIp,
+        hb.egressGeo,
+        hb.cookieCheckedAt,
+        hb.egressCheckedAt,
+      ],
+    );
+  }
+
+  async loadCollectorHeartbeat(): Promise<import('./ports.js').CollectorHeartbeat | null> {
+    const row = await this.queryFirst<{
+      cookie_md5: string | null;
+      cookie_mid: number | null;
+      cookie_uname: string | null;
+      is_login: number | null;
+      nav_code: number | null;
+      valid: number | null;
+      error: string | null;
+      egress_ip: string | null;
+      egress_geo: string | null;
+      cookie_checked_at: string | null;
+      egress_checked_at: string | null;
+    }>(
+      `SELECT cookie_md5, cookie_mid, cookie_uname, is_login, nav_code, valid, error, egress_ip, egress_geo, cookie_checked_at, egress_checked_at
+       FROM collector_leases WHERE name = 'heartbeat' LIMIT 1`,
+      [],
+    );
+    if (!row) return null;
+    return {
+      cookieMd5: row.cookie_md5,
+      cookieMid: row.cookie_mid,
+      cookieUname: row.cookie_uname,
+      isLogin: row.is_login,
+      navCode: row.nav_code,
+      valid: row.valid,
+      error: row.error,
+      egressIp: row.egress_ip,
+      egressGeo: row.egress_geo,
+      cookieCheckedAt: row.cookie_checked_at,
+      egressCheckedAt: row.egress_checked_at,
+    };
+  }
 }

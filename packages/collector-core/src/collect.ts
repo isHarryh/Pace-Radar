@@ -1,6 +1,7 @@
 import {
   deriveStatus,
   intervalMinutesFor,
+  md5Hex,
   type PaceConfig,
   type NavResponse,
   type WbiKeys,
@@ -35,6 +36,52 @@ function shouldArchive(now: Date): boolean {
   return now.getMinutes() === 0;
 }
 
+async function fetchEgressGeo(transport: BiliTransport): Promise<{ ip: string | null; geo: string | null }> {
+  // Primary: Cloudflare trace is most reliable inside Workers and reflects egress colo
+  try {
+    const res = await transport.fetch('https://1.1.1.1/cdn-cgi/trace', { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const text = await res.text();
+      const m: Record<string, string> = {};
+      for (const line of text.trim().split('\n')) {
+        const idx = line.indexOf('=');
+        if (idx > 0) m[line.slice(0, idx)] = line.slice(idx + 1);
+      }
+      if (m.ip) {
+        const geo = JSON.stringify({ colo: m.colo ?? null, loc: m.loc ?? null, country: m.loc ?? null });
+        return { ip: m.ip, geo };
+      }
+    }
+  } catch {}
+  // Fallback: public geo IP
+  try {
+    const res = await transport.fetch('https://ip-api.com/json/?fields=status,message,country,regionName,city,query', {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        status?: string;
+        country?: string;
+        regionName?: string;
+        city?: string;
+        query?: string;
+      };
+      if (data.status === 'success' && data.query) {
+        const geo = JSON.stringify({ country: data.country ?? null, regionName: data.regionName ?? null, city: data.city ?? null });
+        return { ip: data.query, geo };
+      }
+    }
+  } catch {}
+  try {
+    const res = await transport.fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = (await res.json()) as { ip?: string };
+      if (data.ip) return { ip: data.ip, geo: null };
+    }
+  } catch {}
+  return { ip: null, geo: null };
+}
+
 export async function collect(store: CollectorStore, options: CollectOptions): Promise<boolean> {
   const log = options.log ?? console.log;
   const acquired = await store.acquireLease(options.holder, options.leaseSeconds ?? 120);
@@ -64,6 +111,73 @@ export async function collect(store: CollectorStore, options: CollectOptions): P
         likeCount: 0,
         shareCount: 0,
       });
+    }
+
+    // Async heartbeat: egress IP geo via public service (through same transport/proxy) + cookie state
+    let egress: { ip: string | null; geo: string | null } = { ip: null, geo: null };
+    try {
+      egress = await fetchEgressGeo(options.transport);
+    } catch {
+      // ignore egress fetch failure
+    }
+    try {
+      const cookie = config.bilibiliCookie ?? '';
+      const cookieMd5 = cookie ? md5Hex(cookie) : null;
+      const checkedAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      let isLogin: number | null = null;
+      let cookieMid: number | null = null;
+      let cookieUname: string | null = null;
+      let navCode: number | null = nav?.code ?? null;
+      let valid: number | null = null;
+      let error: string | null = null;
+      if (!cookie) {
+        valid = null;
+        error = null;
+      } else if (navError) {
+        const status = navError.statusCode;
+        if (status === '412') {
+          valid = null;
+          error = '风控拦截 412';
+        } else {
+          valid = null;
+          error = navError.message.slice(0, 200);
+        }
+        // try to parse numeric code for nav_code
+        const n = Number(status);
+        if (!Number.isNaN(n)) navCode = n;
+      } else if (nav) {
+        navCode = nav.code;
+        if (nav.code === 0) {
+          valid = 1;
+          isLogin = nav.data?.isLogin ? 1 : 0;
+          cookieMid = nav.data?.mid ?? null;
+          cookieUname = (nav.data?.uname ?? (nav.data as { name?: string })?.name) ?? null;
+          error = null;
+        } else if (nav.code === -101) {
+          valid = 0;
+          isLogin = 0;
+          error = '未登录 (-101)';
+        } else {
+          valid = 0;
+          isLogin = 0;
+          error = `B站返回 ${nav.code}: ${nav.message ?? '未知错误'}`.slice(0, 200);
+        }
+      }
+      await store.saveCollectorHeartbeat({
+        cookieMd5,
+        cookieMid,
+        cookieUname,
+        isLogin,
+        navCode,
+        valid,
+        error,
+        egressIp: egress.ip,
+        egressGeo: egress.geo,
+        cookieCheckedAt: checkedAt,
+        egressCheckedAt: checkedAt,
+      });
+    } catch (e) {
+      log(`[collector] save heartbeat failed: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     if (nav?.code === -101) {

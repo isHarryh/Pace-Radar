@@ -10,6 +10,7 @@ const config: PaceConfig = { collectIntervalMinutes: 5, activeIntervalMinutes: 1
 class FakeStore implements CollectorStore {
   snapshots: SnapshotInsert[] = [];
   lease = false;
+  heartbeat: import('./ports.js').CollectorHeartbeat | null = null;
 
   async loadConfig() { return config; }
   async saveWbiKeys() {}
@@ -29,6 +30,8 @@ class FakeStore implements CollectorStore {
     return true;
   }
   async releaseLease() { this.lease = false; }
+  async saveCollectorHeartbeat(hb: import('./ports.js').CollectorHeartbeat) { this.heartbeat = hb; }
+  async loadCollectorHeartbeat() { return this.heartbeat; }
 }
 
 function response(body: unknown, status = 200): Response {
@@ -62,7 +65,9 @@ describe('collect', () => {
     });
 
     expect(result).toBe(true);
-    expect(calls).toHaveLength(3);
+    // finger/spi + nav + ip-api + feed/space (egress via public IP geo)
+    expect(calls.filter((u) => !u.includes('ip-api.com'))).toHaveLength(3);
+    expect(calls.some((u) => u.includes('ip-api.com'))).toBe(true);
     expect(store.snapshots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ accountId: 1, statusCode: 'ok', targetId: 'low', commentCount: 1, likeCount: 10 }),
@@ -80,13 +85,14 @@ describe('collect', () => {
       transport: {
         fetch: async (input) => {
           calls.push(input);
+          if (input.includes('ip-api.com')) return response({ status: 'fail', message: 'fail' });
           if (input.includes('/finger/spi')) return response('<html>412</html>', 412);
           return response('<html>412</html>', 412);
         },
       },
     });
 
-    expect(calls).toHaveLength(3);
+    expect(calls.filter((u) => !u.includes('ip-api.com'))).toHaveLength(3);
     expect(store.snapshots).toEqual([
       expect.objectContaining({ accountId: 0, statusCode: '412', endpoint: 'nav', targetId: '' }),
       expect.objectContaining({ accountId: 1, statusCode: '412', endpoint: 'feed/space', targetId: '' }),

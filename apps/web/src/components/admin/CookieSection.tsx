@@ -2,14 +2,28 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { md5Hex } from '@pace-radar/shared';
 import { fetchAdminCookie, updateAdminCookie } from '../../api';
-import { formatDateTime } from '../../format';
+import { formatDateTime, parseDbTime } from '../../format';
 import { badgeBase, badgeTone, btnGhost, btnPrimary, surface, surfaceHeader } from '../ui';
+
+function formatCheckedAt(value: string | null): string {
+  if (!value) return '等待校验';
+  // DB format: 'YYYY-MM-DD HH:MM:SS' -> parseDbTime, ISO: '2026-...T...Z' -> new Date
+  try {
+    const d = value.includes('T') ? new Date(value) : parseDbTime(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch {
+    return '—';
+  }
+}
 
 function IdentityLine({ data }: { data: NonNullable<Awaited<ReturnType<typeof fetchAdminCookie>>> }) {
   if (data.length === 0) {
     return <p className="text-sm text-muted">未配置凭据</p>;
   }
   if (!data.identity) {
+    if (!data.cookieCheckedAt) return <p className="text-sm text-muted">等待采集器校验</p>;
     return <p className="text-sm text-muted">无法识别身份</p>;
   }
   if (data.identity.isLogin) {
@@ -28,6 +42,25 @@ function IdentityLine({ data }: { data: NonNullable<Awaited<ReturnType<typeof fe
       <span>未登录</span>
     </p>
   );
+}
+
+function parseGeo(geo: string | null): string | null {
+  if (!geo) return null;
+  try {
+    const o = JSON.parse(geo) as {
+      country?: string | null;
+      regionName?: string | null;
+      city?: string | null;
+      colo?: string | null;
+      loc?: string | null;
+    };
+    const parts = [o.country, o.regionName, o.city, o.colo, o.loc].filter(Boolean) as string[];
+    // Deduplicate loc/country when same (e.g., loc SG and country SG)
+    const uniq = Array.from(new Set(parts));
+    return uniq.length ? uniq.join(' · ') : null;
+  } catch {
+    return geo;
+  }
 }
 
 function ValidBadge({ valid }: { valid: boolean | null }) {
@@ -170,7 +203,20 @@ export function CookieSection() {
                       </div>
                     </div>
 
-                    <p className="text-sm text-muted">更新于 {data.updatedAt ? formatDateTime(data.updatedAt) : '未知'}</p>
+                    <div className="rounded-xl border border-line bg-bg px-4 py-3.5">
+                      <div className="text-sm text-muted">采集器出口</div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-mono font-medium text-ink">{data.egressIp ?? '—'}</span>
+                        {parseGeo(data.egressGeo) && <span className="text-muted">{parseGeo(data.egressGeo)}</span>}
+                        {!data.egressIp && <span className="text-muted">等待采集器上报</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 text-sm text-muted">
+                      <span>凭据更新于 {data.updatedAt ? formatDateTime(data.updatedAt) : '未知'}</span>
+                      <span className="hidden sm:inline">·</span>
+                      <span>校验于 {formatCheckedAt(data.cookieCheckedAt)}</span>
+                    </div>
                   </>
                 )}
               </div>

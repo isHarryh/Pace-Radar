@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { BILI_API, BILI_HEADERS, DEFAULT_CONFIG, md5Hex, type PaceConfig } from '@pace-radar/shared';
+import { DEFAULT_CONFIG, md5Hex, type PaceConfig } from '@pace-radar/shared';
 import { listAccounts, requestLogs } from './db';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -46,43 +46,7 @@ async function setConfigValue(db: D1Database, key: string, value: string): Promi
   await db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').bind(key, value).run();
 }
 
-async function getCookieState(cookie: string): Promise<{
-  valid: boolean | null;
-  identity: { isLogin: boolean; mid: number | null; uname: string | null } | null;
-  error: string | null;
-}> {
-  try {
-    const res = await fetch(`${BILI_API}/x/web-interface/nav`, {
-      headers: { ...BILI_HEADERS, Cookie: cookie },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      if (text.includes('412') || text.includes('request was banned')) return { valid: null, identity: null, error: '风控拦截 412' };
-      return { valid: null, identity: null, error: `HTTP ${res.status}` };
-    }
-    const body = (await res.json()) as { code: number; message?: string; data?: { isLogin?: boolean; mid?: number; uname?: string; name?: string } };
-    if (body.code === 0) {
-      const d = body.data;
-      return {
-        valid: true,
-        identity: { isLogin: !!d?.isLogin, mid: d?.mid ?? null, uname: d?.uname ?? d?.name ?? null },
-        error: null,
-      };
-    }
-    if (body.code === -101) return { valid: false, identity: { isLogin: false, mid: null, uname: null }, error: '未登录 (-101)' };
-    return {
-      valid: false,
-      identity: { isLogin: false, mid: null, uname: null },
-      error: `B站返回 ${body.code}: ${body.message ?? '未知错误'}`,
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes('412') || msg.includes('banned')) return { valid: null, identity: null, error: '风控拦截 412' };
-    if (msg.toLowerCase().includes('timeout')) return { valid: null, identity: null, error: '请求超时' };
-    return { valid: null, identity: null, error: msg };
-  }
-}
+
 
 export const admin = new Hono<{ Bindings: { DB: D1Database } }>();
 
@@ -197,17 +161,61 @@ admin.get('/cookie', async (c) => {
     updated_at: string;
   }>();
   const cookie = row?.value ?? '';
+  const md5 = cookie ? md5Hex(cookie) : null;
   const base = {
     length: cookie.length,
     masked: cookie ? `${cookie.slice(0, 40)}…` : '',
-    md5: cookie ? md5Hex(cookie) : null as string | null,
+    md5,
     updatedAt: row?.updated_at ?? null,
   };
   if (!cookie) {
-    return c.json({ data: { ...base, valid: null as boolean | null, error: null as string | null, identity: null as null } });
+    return c.json({
+      data: {
+        ...base,
+        valid: null as boolean | null,
+        error: null as string | null,
+        identity: null as null,
+        cookieCheckedAt: null as string | null,
+        egressIp: null as string | null,
+        egressGeo: null as string | null,
+        egressCheckedAt: null as string | null,
+      },
+    });
   }
-  const state = await getCookieState(cookie);
-  return c.json({ data: { ...base, ...state } });
+  const hb = await c.env.DB.prepare(
+    `SELECT cookie_md5, cookie_mid, cookie_uname, is_login, nav_code, valid, error, egress_ip, egress_geo, cookie_checked_at, egress_checked_at
+     FROM collector_leases WHERE name = 'heartbeat' LIMIT 1`,
+  ).first<{
+    cookie_md5: string | null;
+    cookie_mid: number | null;
+    cookie_uname: string | null;
+    is_login: number | null;
+    nav_code: number | null;
+    valid: number | null;
+    error: string | null;
+    egress_ip: string | null;
+    egress_geo: string | null;
+    cookie_checked_at: string | null;
+    egress_checked_at: string | null;
+  }>();
+  // Only use heartbeat if its md5 matches current cookie
+  const matched = hb && hb.cookie_md5 === md5;
+  const identity = matched && hb.cookie_mid != null ? { isLogin: !!hb.is_login, mid: hb.cookie_mid, uname: hb.cookie_uname } : matched && hb.is_login != null ? { isLogin: !!hb.is_login, mid: hb.cookie_mid, uname: hb.cookie_uname } : null;
+  // When no matched heartbeat yet, keep valid/error null to indicate pending
+  const valid = matched && hb.valid != null ? !!hb.valid : null;
+  const error = matched ? hb.error : null;
+  return c.json({
+    data: {
+      ...base,
+      valid,
+      error,
+      identity,
+      cookieCheckedAt: matched ? hb.cookie_checked_at : null,
+      egressIp: hb?.egress_ip ?? null,
+      egressGeo: hb?.egress_geo ?? null,
+      egressCheckedAt: hb?.egress_checked_at ?? null,
+    },
+  });
 });
 
 admin.put('/cookie', async (c) => {
