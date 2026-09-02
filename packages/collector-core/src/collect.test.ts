@@ -38,6 +38,14 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+function traceResponse(): Response {
+  return new Response('ip=1.1.1.1\ncolo=SIN\nloc=SG\n', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+}
+
+function isEgress(input: string): boolean {
+  return input.includes('1.1.1.1/cdn-cgi/trace') || input.includes('ip-api.com') || input.includes('api.ipify.org');
+}
+
 describe('collect', () => {
   it('collects all dynamics on the first page and writes snapshots per target', async () => {
     const store = new FakeStore();
@@ -47,6 +55,11 @@ describe('collect', () => {
       transport: {
         fetch: async (input) => {
           calls.push(input);
+          if (isEgress(input)) {
+            if (input.includes('1.1.1.1/cdn-cgi/trace')) return traceResponse();
+            if (input.includes('ip-api.com')) return response({ status: 'success', query: '1.1.1.1', country: 'SG', regionName: 'SG', city: 'SG' });
+            return response({ ip: '1.1.1.1' });
+          }
           if (input.includes('/finger/spi')) return response({ code: -1 });
           if (input.includes('/x/web-interface/nav')) {
             return response({ code: 0, data: { wbi_img: { img_url: 'https://i/a.png', sub_url: 'https://i/b.png' } } });
@@ -65,9 +78,8 @@ describe('collect', () => {
     });
 
     expect(result).toBe(true);
-    // finger/spi + nav + ip-api + feed/space (egress via public IP geo)
-    expect(calls.filter((u) => !u.includes('ip-api.com'))).toHaveLength(3);
-    expect(calls.some((u) => u.includes('ip-api.com'))).toBe(true);
+    expect(calls.filter((u) => !isEgress(u))).toHaveLength(3);
+    expect(calls.some((u) => isEgress(u))).toBe(true);
     expect(store.snapshots).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ accountId: 1, statusCode: 'ok', targetId: 'low', commentCount: 1, likeCount: 10 }),
@@ -85,14 +97,18 @@ describe('collect', () => {
       transport: {
         fetch: async (input) => {
           calls.push(input);
-          if (input.includes('ip-api.com')) return response({ status: 'fail', message: 'fail' });
+          if (isEgress(input)) {
+            if (input.includes('1.1.1.1/cdn-cgi/trace')) return traceResponse();
+            if (input.includes('ip-api.com')) return response({ status: 'fail', message: 'fail' });
+            return response({ ip: '1.1.1.1' });
+          }
           if (input.includes('/finger/spi')) return response('<html>412</html>', 412);
           return response('<html>412</html>', 412);
         },
       },
     });
 
-    expect(calls.filter((u) => !u.includes('ip-api.com'))).toHaveLength(3);
+    expect(calls.filter((u) => !isEgress(u))).toHaveLength(3);
     expect(store.snapshots).toEqual([
       expect.objectContaining({ accountId: 0, statusCode: '412', endpoint: 'nav', targetId: '' }),
       expect.objectContaining({ accountId: 1, statusCode: '412', endpoint: 'feed/space', targetId: '' }),

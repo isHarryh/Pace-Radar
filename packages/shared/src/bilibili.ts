@@ -4,13 +4,22 @@ import type { WbiKeys } from './types.js';
 
 export const BILI_API = 'https://api.bilibili.com';
 export const BILI_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36 Edg/152.0.0.0';
+export const BILI_REFERER = 'https://www.bilibili.com/';
+export const BILI_ORIGIN = 'https://www.bilibili.com';
+
+/** 浏览器真实请求头伪装 */
 export const BILI_HEADERS: Record<string, string> = {
   'User-Agent': BILI_UA,
-  Referer: 'https://www.bilibili.com/',
-  Origin: 'https://www.bilibili.com',
-  Accept: 'application/json, text/plain, */*',
-  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  Accept: '*/*',
+  'Accept-Language': 'zh-CN,zh-TW;q=0.9,zh-HK;q=0.8,zh;q=0.7,en;q=0.6,en-GB;q=0.5,en-US;q=0.4',
+  Referer: BILI_REFERER,
+  Origin: BILI_ORIGIN,
+  DNT: '1',
+  Priority: 'u=1, i',
+  'Sec-Ch-Ua': '"Chromium";v="152", "Not_A_Brand";v="24", "Microsoft Edge";v="152"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
   'Sec-Fetch-Dest': 'empty',
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-site',

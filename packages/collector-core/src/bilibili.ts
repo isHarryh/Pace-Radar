@@ -87,7 +87,25 @@ function createBiliFetch(transport: BiliTransport) {
 }
 
 export function createBiliClient(transport: BiliTransport): BiliClient {
-  const biliFetch = createBiliFetch(transport);
+  let lastRequestAt = 0;
+  async function throttle(): Promise<void> {
+    const now = Date.now();
+    const elapsed = now - lastRequestAt;
+    const isTest = typeof process !== 'undefined' && (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
+    const min = isTest ? 10 : 1000;
+    const max = isTest ? 20 : 2000;
+    const delay = min + Math.random() * (max - min);
+    if (lastRequestAt !== 0 && elapsed < delay) {
+      await new Promise<void>((r) => setTimeout(r, delay - elapsed));
+    }
+    lastRequestAt = Date.now();
+  }
+  async function throttledFetch(input: string, init?: RequestInit): Promise<Response> {
+    if (input.includes(BILI_API)) await throttle();
+    return transport.fetch(input, init);
+  }
+  const throttledTransport: BiliTransport = { fetch: throttledFetch };
+  const biliFetch = createBiliFetch(throttledTransport);
   let preparedCookie: string | null = null;
   let preparedCookieSource = '';
 
@@ -96,7 +114,7 @@ export function createBiliClient(transport: BiliTransport): BiliClient {
     preparedCookieSource = cookie;
     preparedCookie = cookie;
     try {
-      const response = await transport.fetch(`${BILI_API}/x/frontend/finger/spi`, {
+      const response = await throttledFetch(`${BILI_API}/x/frontend/finger/spi`, {
         headers: { ...BILI_HEADERS, Cookie: cookie },
         signal: AbortSignal.timeout(10_000),
       });
