@@ -4,7 +4,6 @@ import { fetchAdminConfig, updateAdminConfig } from '../../api';
 import { useRefresh } from '../RefreshControl';
 
 import { btnPrimary, errorMessage, fieldLabel, inputBase, surface, surfaceBody, surfaceFooter, surfaceHeader } from '../ui';
-const inputCls = `${inputBase} w-24`;
 
 export function ConfigSection() {
   const queryClient = useQueryClient();
@@ -47,24 +46,28 @@ export function ConfigSection() {
   return (
     <section className={surface}>
       <div className={surfaceHeader}>
-        <h2 className="text-sm font-semibold text-ink">采集间隔</h2>
-        <p className="mt-1 text-xs leading-relaxed text-muted">正常状态按常规频率，观察 / 节奏中自动加速。</p>
+        <h2 className="text-[15px] font-semibold text-ink">采集间隔</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">正常状态按常规频率，观察或节奏中自动加速。</p>
       </div>
       <div className={surfaceBody}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <label className={fieldLabel}>
-            <span>正常状态 <span className="font-normal text-muted">/ 分钟</span></span>
-            <input value={collect} onChange={(e) => setCollect(e.target.value)} className={inputCls} inputMode="numeric" placeholder="5" />
+            <span>
+              正常状态 <span className="font-normal text-muted">/ 分钟</span>
+            </span>
+            <input value={collect} onChange={(e) => setCollect(e.target.value)} className={inputBase} inputMode="numeric" placeholder="5" />
           </label>
           <label className={fieldLabel}>
-            <span>观察 / 节奏状态 <span className="font-normal text-muted">/ 分钟</span></span>
-            <input value={active} onChange={(e) => setActive(e.target.value)} className={inputCls} inputMode="numeric" placeholder="1" />
+            <span>
+              观察 / 节奏状态 <span className="font-normal text-muted">/ 分钟</span>
+            </span>
+            <input value={active} onChange={(e) => setActive(e.target.value)} className={inputBase} inputMode="numeric" placeholder="1" />
           </label>
         </div>
-        {error && <p className={`${errorMessage} mt-3`}>{error}</p>}
+        {error && <p className={`${errorMessage} mt-4`}>{error}</p>}
       </div>
       <div className={surfaceFooter}>
-        <p className="text-xs text-muted">默认 5 分钟 / 1 分钟，需为 ≥1 的整数</p>
+        <p className="text-sm text-muted">默认 5 分钟 / 1 分钟，需为 ≥ 1 的整数</p>
         <button type="button" disabled={!canSave} onClick={save} className={btnPrimary}>
           {busy ? '保存中…' : '保存设置'}
         </button>

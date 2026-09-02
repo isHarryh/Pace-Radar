@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchAdminLogs } from '../api';
 import { Header } from '../components/Header';
@@ -9,9 +9,20 @@ import { RequestLogsTable } from '../components/admin/LogsSection';
 import { RefreshControl, useRefresh } from '../components/RefreshControl';
 import { pageShell, surface, surfaceContent, tabClass } from '../components/ui';
 
+function useAdminTab(): 'manage' | 'logs' {
+  const getTab = () => (window.location.hash.startsWith('#/admin/logs') ? 'logs' : 'manage');
+  const [tab, setTab] = useState<'manage' | 'logs'>(getTab);
+  useEffect(() => {
+    const onChange = () => setTab(getTab());
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  }, []);
+  return tab;
+}
+
 export function AdminPage() {
   const { intervalMs } = useRefresh();
-  const [tab, setTab] = useState<'manage' | 'logs'>('manage');
+  const tab = useAdminTab();
   const { data: logs } = useQuery({
     queryKey: ['admin-logs'],
     queryFn: () => fetchAdminLogs(50),
@@ -25,27 +36,27 @@ export function AdminPage() {
         <RefreshControl />
       </Header>
       <main className={pageShell}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h1 className="text-lg font-semibold text-ink sm:text-xl">管理后台</h1>
-          <div className="flex gap-2 self-start sm:self-auto">
-            <button type="button" onClick={() => setTab('manage')} aria-pressed={tab === 'manage'} className={tabClass(tab === 'manage')}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl font-semibold tracking-tight text-ink">管理后台</h1>
+          <nav className="flex gap-2 self-start sm:self-auto" aria-label="管理后台导航">
+            <a href="#/admin" aria-current={tab === 'manage' ? 'page' : undefined} className={tabClass(tab === 'manage')}>
               账号与配置
-            </button>
-            <button type="button" onClick={() => setTab('logs')} aria-pressed={tab === 'logs'} className={tabClass(tab === 'logs')}>
+            </a>
+            <a href="#/admin/logs" aria-current={tab === 'logs' ? 'page' : undefined} className={tabClass(tab === 'logs')}>
               请求日志
-            </button>
-          </div>
+            </a>
+          </nav>
         </div>
 
         {tab === 'manage' ? (
-          <div className="mt-3 flex flex-col gap-3 sm:mt-4 sm:gap-4">
+          <div className="mt-6 flex flex-col gap-5">
             <ConfigSection />
             <CookieSection />
             <AccountsSection />
           </div>
         ) : (
-          <div className={`${surface} ${surfaceContent}`}>
-            <h2 className="mb-3 text-sm font-medium text-ink sm:text-[15px]">最近请求</h2>
+          <div className={`${surface} ${surfaceContent} mt-6`}>
+            <h2 className="mb-4 text-[15px] font-semibold text-ink">最近请求</h2>
             <RequestLogsTable logs={logs ?? []} />
           </div>
         )}

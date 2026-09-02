@@ -137,6 +137,7 @@ export interface RequestLog {
   id: number;
   accountId: number;
   accountName: string | null;
+  accountMid: number | null;
   targetType: string;
   targetId: string | null;
   commentCount: number;

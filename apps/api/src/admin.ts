@@ -225,6 +225,7 @@ admin.get('/logs', async (c) => {
       id: l.id,
       accountId: l.account_id,
       accountName: l.account_name,
+      accountMid: l.account_mid,
       targetType: l.target_type,
       targetId: l.target_id,
       commentCount: l.comment_count,

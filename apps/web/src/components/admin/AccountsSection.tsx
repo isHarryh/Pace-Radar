@@ -38,27 +38,27 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
 
   return (
     <tr className="border-b border-line/60 last:border-0 hover:bg-bg/40">
-      <td className="py-2.5 pr-3">
+      <td className="py-3 pr-3">
         <AvatarUpload accountId={account.mid} name={account.name} hasAvatar={account.hasAvatar} onSaved={onSaved} />
       </td>
-      <td className="py-2.5 pr-3">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="显示名称" className={`${inputBase} min-w-[140px]`} />
+      <td className="py-3 pr-3">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="显示名称" className={`${inputBase} min-w-[160px]`} />
       </td>
-      <td className="py-2.5 pr-3">
-        <span className="font-mono text-xs text-muted">{account.mid}</span>
+      <td className="py-3 pr-3">
+        <span className="font-mono text-sm text-muted">{account.mid}</span>
       </td>
-      <td className="py-2.5 pr-3">
+      <td className="py-3 pr-3">
         <input
           type="number"
           step="0.05"
           min="0.01"
           value={threshold}
           onChange={(e) => setThreshold(e.target.value)}
-           className={`${inputBase} !h-8 w-20`}
+          className={`${inputBase} w-24`}
           inputMode="decimal"
         />
       </td>
-      <td className="py-2.5 pr-3">
+      <td className="py-3 pr-3">
         <label className="relative inline-flex cursor-pointer items-center">
           <input
             type="checkbox"
@@ -70,7 +70,7 @@ function AccountRow({ account, onSaved }: { account: AdminAccount; onSaved: () =
           <span className="relative h-5 w-9 rounded-full bg-line transition after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition peer-checked:bg-brand peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-brand/30" />
         </label>
       </td>
-      <td className="py-2.5">
+      <td className="py-3">
         <div className="flex items-center gap-2">
           <button type="button" disabled={!canSave} onClick={save} className={btnPrimarySm}>
             {busy ? '保存中' : '保存'}
@@ -122,19 +122,19 @@ export function AccountsSection() {
   return (
     <section className={surface}>
       <div className={surfaceHeader}>
-        <h2 className="text-sm font-semibold text-ink">监控账号</h2>
-        <p className="mt-1 text-xs leading-relaxed text-muted">管理 B 站 UID 与评赞比阈值，启用后即进入采集队列。</p>
+        <h2 className="text-[15px] font-semibold text-ink">监控账号</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">管理 B 站 UID 与评赞比阈值，启用后即进入采集队列。</p>
       </div>
       <div className={tableScroll}>
         <table className={`${tableBase} min-w-[640px]`}>
           <thead>
-            <tr className="border-b border-line bg-bg/30 text-left text-xs text-muted">
-              <th className="px-4 py-2.5 font-medium">头像</th>
-              <th className="px-3 py-2.5 font-medium">名称</th>
-              <th className="px-3 py-2.5 font-medium">UID</th>
-              <th className="px-3 py-2.5 font-medium">阈值</th>
-              <th className="px-3 py-2.5 font-medium">启用</th>
-              <th className="px-4 py-2.5 font-medium"></th>
+            <tr className="border-b border-line bg-bg/40 text-left text-sm text-muted">
+              <th className="px-5 py-3 font-medium">头像</th>
+              <th className="px-3 py-3 font-medium">名称</th>
+              <th className="px-3 py-3 font-medium">UID</th>
+              <th className="px-3 py-3 font-medium">阈值</th>
+              <th className="px-3 py-3 font-medium">启用</th>
+              <th className="px-5 py-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
@@ -146,28 +146,25 @@ export function AccountsSection() {
         {!accounts?.length && <p className="py-10 text-center text-sm text-muted">暂无账号，请在下方新增</p>}
       </div>
       <div className={surfaceFormFooter}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[160px_180px_1fr] sm:items-end">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[160px_1fr_auto] sm:items-end">
           <label className={fieldLabel}>
-            <span>UID <span className="font-normal text-muted">· 数字</span></span>
+            <span>
+              UID <span className="font-normal text-muted">· 数字</span>
+            </span>
             <input placeholder="如 2" value={newMid} onChange={(e) => setNewMid(e.target.value)} className={inputBase} inputMode="numeric" />
           </label>
           <label className={fieldLabel}>
             <span>显示名称</span>
             <input placeholder="如 哔哩哔哩官方" value={newName} onChange={(e) => setNewName(e.target.value)} className={inputBase} />
           </label>
-          <div className="flex items-center gap-2 sm:justify-end">
-            <button
-              type="button"
-              disabled={!canCreate}
-              onClick={create}
-              className={`${btnPrimary} w-full sm:w-auto`}
-            >
+          <div className="flex items-center gap-2 sm:justify-end sm:pb-0">
+            <button type="button" disabled={!canCreate} onClick={create} className={`${btnPrimary} w-full sm:w-auto`}>
               {busy ? '创建中…' : '新增账号'}
             </button>
           </div>
         </div>
         {error && <p className={`${errorMessage} mt-3`}>{error}</p>}
-        <p className="mt-2 hidden text-xs text-muted sm:block">提示：UID 为 space.bilibili.com/ 后的数字，阈值默认 0.5。</p>
+        <p className="mt-3 hidden text-sm text-muted sm:block">提示：UID 为 space.bilibili.com/ 后的数字，阈值默认 0.5。</p>
       </div>
     </section>
   );

@@ -88,46 +88,52 @@ export function CookieSection() {
   return (
     <section className={surface}>
       <div className={surfaceHeader}>
-        <h2 className="text-sm font-semibold text-ink">B站凭据</h2>
-        <p className="mt-1 leading-relaxed text-muted">采集使用的 B 站登录态，更新后即时生效。</p>
+        <h2 className="text-[15px] font-semibold text-ink">B站凭据</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">采集使用的 B 站登录态，更新后即时生效。</p>
       </div>
 
-      <div className="divide-y divide-line/60">
-        <div className="p-4 sm:p-5">
+      <div className="divide-y divide-line">
+        <div className="p-5 sm:p-6">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-medium text-ink">当前凭据</h3>
+            <h3 className="text-sm font-semibold text-ink">当前凭据</h3>
             <button
               type="button"
               onClick={handleFetch}
               disabled={isFetching}
-              className={isFetching ? btnGhost + ' opacity-60' : btnGhost}
+              className={hasFetched ? btnGhost : btnPrimary}
             >
               {isFetching ? '获取中…' : hasFetched ? '刷新' : '获取'}
             </button>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-5">
             {!hasFetched && !isFetching && !queryError && !data && (
-              <div className="rounded-lg border border-dashed border-line bg-bg/40 px-4 py-6 text-center">
-                <p className="text-sm text-muted">点击获取查看当前凭据的身份与状态</p>
+              <div className="flex flex-col items-center justify-center rounded-xl border border-line bg-bg px-6 py-8 text-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-line">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-muted" aria-hidden>
+                    <path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                    <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className="mt-3 text-sm font-medium text-ink">尚未获取当前凭据</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted">点击获取查看身份、长度与校验信息</p>
               </div>
             )}
 
             {isFetching && (
-              <div className="space-y-3">
-                <div className="h-5 w-32 animate-pulse rounded bg-line" />
+              <div className="space-y-4">
+                <div className="h-5 w-40 animate-pulse rounded bg-line" />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="h-16 animate-pulse rounded-lg bg-line/60" />
-                  <div className="h-16 animate-pulse rounded-lg bg-line/60" />
-                  <div className="h-16 animate-pulse rounded-lg bg-line/60" />
+                  <div className="h-[72px] animate-pulse rounded-xl bg-bg" />
+                  <div className="h-[72px] animate-pulse rounded-xl bg-bg sm:col-span-2" />
                 </div>
               </div>
             )}
 
             {queryError && !isFetching && (
-              <div className="rounded-lg bg-danger/10 px-4 py-3">
+              <div className="rounded-xl border border-danger/20 bg-danger/10 px-4 py-4">
                 <p className="text-sm font-medium text-danger">获取失败</p>
-                <p className="mt-1 text-sm text-danger/80">{queryError instanceof Error ? queryError.message : String(queryError)}</p>
+                <p className="mt-1 text-sm leading-relaxed text-danger/80">{queryError instanceof Error ? queryError.message : String(queryError)}</p>
                 <button type="button" onClick={handleFetch} className={`${btnGhost} mt-3`}>
                   重试
                 </button>
@@ -137,7 +143,7 @@ export function CookieSection() {
             {data && !isFetching && !queryError && (
               <div className="space-y-4">
                 {data.length === 0 ? (
-                  <div className="rounded-lg bg-bg px-4 py-4">
+                  <div className="rounded-xl border border-line bg-bg px-4 py-4">
                     <p className="text-sm text-muted">尚未配置凭据，请在下方粘贴并更新。</p>
                   </div>
                 ) : (
@@ -148,25 +154,23 @@ export function CookieSection() {
                     </div>
 
                     {data.error && (
-                      <div className="rounded-lg bg-danger/10 px-3 py-2.5">
-                        <p className="text-sm text-danger">{data.error}</p>
+                      <div className="rounded-xl border border-danger/20 bg-danger/10 px-3 py-3">
+                        <p className="text-sm leading-relaxed text-danger">{data.error}</p>
                       </div>
                     )}
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                      <div className="rounded-lg bg-bg px-3 py-3">
+                      <div className="rounded-xl border border-line bg-bg px-4 py-3.5">
                         <div className="text-sm text-muted">长度</div>
-                        <div className="mt-1 font-mono text-sm text-ink">{data.length.toLocaleString()} 字符</div>
+                        <div className="mt-1.5 font-mono text-sm font-medium text-ink">{data.length.toLocaleString()} 字符</div>
                       </div>
-                      <div className="rounded-lg bg-bg px-3 py-3 sm:col-span-2">
+                      <div className="rounded-xl border border-line bg-bg px-4 py-3.5 sm:col-span-2">
                         <div className="text-sm text-muted">MD5</div>
-                        <div className="mt-1 break-all font-mono text-sm text-ink">{data.md5 ?? '—'}</div>
+                        <div className="mt-1.5 break-all font-mono text-sm text-ink">{data.md5 ?? '—'}</div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 text-sm text-muted">
-                      <span>更新于 {data.updatedAt ? formatDateTime(data.updatedAt) : '未知'}</span>
-                    </div>
+                    <p className="text-sm text-muted">更新于 {data.updatedAt ? formatDateTime(data.updatedAt) : '未知'}</p>
                   </>
                 )}
               </div>
@@ -174,9 +178,9 @@ export function CookieSection() {
           </div>
         </div>
 
-        <div className="bg-bg/30 p-4 sm:p-5">
-          <h3 className="text-sm font-medium text-ink">更新凭据</h3>
-          <p className="mt-1 text-sm text-muted">粘贴从浏览器复制的完整 Cookie，系统会自动去除前后空白。</p>
+        <div className="bg-bg/40 p-5 sm:p-6">
+          <h3 className="text-sm font-semibold text-ink">更新凭据</h3>
+          <p className="mt-1 text-sm leading-relaxed text-muted">粘贴从浏览器复制的完整 Cookie，系统会自动去除前后空白。</p>
 
           <label className="mt-4 block">
             <span className="sr-only">新 Cookie</span>

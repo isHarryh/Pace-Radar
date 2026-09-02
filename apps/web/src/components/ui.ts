@@ -1,11 +1,11 @@
 export const pageShell = 'mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-7';
 export const pageShellNarrow = 'mx-auto w-full max-w-md px-4 py-8 sm:px-6 sm:py-12';
-export const surface = 'overflow-hidden rounded-lg border border-line bg-white shadow-sm';
-export const surfaceHeader = 'border-b border-line/60 bg-bg/40 px-4 py-3';
-export const surfaceBody = 'p-4';
-export const surfaceFooter = 'flex flex-col gap-3 border-t border-line/60 bg-bg/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between';
-export const surfaceFormFooter = 'border-t border-line/60 bg-bg/30 p-3 sm:p-4';
-export const surfaceContent = 'p-3 sm:p-4';
+export const surface = 'overflow-hidden rounded-xl border border-line bg-white shadow-sm';
+export const surfaceHeader = 'border-b border-line/60 bg-bg/40 px-5 py-4';
+export const surfaceBody = 'p-5';
+export const surfaceFooter = 'flex flex-col gap-3 border-t border-line/60 bg-bg/30 px-5 py-4 sm:flex-row sm:items-center sm:justify-between';
+export const surfaceFormFooter = 'border-t border-line/60 bg-bg/30 p-4 sm:p-5';
+export const surfaceContent = 'p-4 sm:p-5';
 export const inputBase =
   'h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none transition ' +
   'placeholder:text-muted/60 focus:border-brand focus:ring-2 focus:ring-brand/15 ' +
@@ -21,8 +21,8 @@ export const btnPrimarySm =
   'hover:bg-brand-hover active:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40';
 export const btnSmall = 'inline-flex h-8 items-center justify-center rounded-md bg-bg px-2.5 text-xs font-medium text-ink transition hover:bg-line disabled:cursor-not-allowed disabled:opacity-40';
 export const btnSmallDanger = 'inline-flex h-8 items-center justify-center rounded-md bg-white px-2.5 text-xs font-medium text-muted ring-1 ring-line transition hover:bg-bg hover:text-danger disabled:cursor-not-allowed disabled:opacity-40';
-export const fieldLabel = 'flex flex-col gap-1.5 text-xs font-medium text-ink';
-export const errorMessage = 'rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger';
+export const fieldLabel = 'flex flex-col gap-2 text-sm font-medium text-ink';
+export const errorMessage = 'rounded-lg bg-danger/10 px-3 py-2.5 text-sm text-danger';
 export const badgeBase = 'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium leading-none';
 export const badgeTone = {
   brand: 'bg-brand/10 text-brand',

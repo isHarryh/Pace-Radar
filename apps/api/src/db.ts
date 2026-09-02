@@ -19,6 +19,7 @@ export interface RequestLogRow {
   id: number;
   account_id: number;
   account_name: string | null;
+  account_mid: number | null;
   target_type: string;
   target_id: string | null;
   comment_count: number;
@@ -119,7 +120,7 @@ export async function requestLogs(db: D1Database, limit: number): Promise<Reques
   const { results } = await db
     .prepare(
       `SELECT s.id, s.account_id, s.target_type, s.target_id, s.comment_count, s.like_count,
-              s.status_code, s.endpoint, s.updated_at, a.name AS account_name
+              s.status_code, s.endpoint, s.updated_at, a.name AS account_name, a.mid AS account_mid
        FROM snapshots s LEFT JOIN accounts a ON a.id = s.account_id
        ORDER BY s.id DESC LIMIT ?`,
     )
