@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { BILI_API, BILI_UA, DEFAULT_CONFIG, type PaceConfig } from '@pace-radar/shared';
+import { BILI_API, BILI_HEADERS, DEFAULT_CONFIG, type PaceConfig } from '@pace-radar/shared';
 import { listAccounts, requestLogs } from './db';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -49,7 +49,7 @@ async function setConfigValue(db: D1Database, key: string, value: string): Promi
 async function checkCookieValidity(cookie: string): Promise<boolean | null> {
   try {
     const res = await fetch(`${BILI_API}/x/web-interface/nav`, {
-      headers: { 'User-Agent': BILI_UA, Cookie: cookie },
+      headers: { ...BILI_HEADERS, Cookie: cookie },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;

@@ -21,6 +21,7 @@ export class D1HttpStore extends BaseCollectorStore {
   }
 
   private async query<T>(sql: string, params: unknown[] = []): Promise<T[]> {
+    // D1 control plane must not go through BILI_PROXY_URL; Bilibili traffic is proxied via BiliTransport dispatcher only
     const response = await fetch(this.endpoint, {
       method: 'POST',
       headers: {

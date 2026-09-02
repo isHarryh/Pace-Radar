@@ -112,20 +112,16 @@ export function createBiliClient(transport: BiliTransport): BiliClient {
     return preparedCookie;
   }
 
-  async function enrichCookie(cookie: string): Promise<string> {
-    return getPreparedCookie(cookie);
-  }
-
   return {
     async nav(cookie) {
-      return biliFetch<NavResponse>('/x/web-interface/nav', '', await enrichCookie(cookie));
+      return biliFetch<NavResponse>('/x/web-interface/nav', '', await getPreparedCookie(cookie));
     },
     async collectAccount(account: Account, cookie: string, wbiKeys: WbiKeys): Promise<FreshStat[]> {
       const query = signWbiQuery(
         { host_mid: String(account.mid), timezone_offset: '-480', platform: 'web', web_location: '333.1387' },
         wbiKeys,
       );
-      const feed = await biliFetch<FeedSpaceResponse>('/x/polymer/web-dynamic/v1/feed/space', query, await enrichCookie(cookie));
+      const feed = await biliFetch<FeedSpaceResponse>('/x/polymer/web-dynamic/v1/feed/space', query, await getPreparedCookie(cookie));
       if (feed.code !== 0) throw new RequestError(String(feed.code), 'feed/space', `feed/space code ${feed.code}`);
       const items = feed.data?.items ?? [];
       if (items.length === 0) throw new RequestError('no_dynamic', 'feed/space', 'no recent dynamic');

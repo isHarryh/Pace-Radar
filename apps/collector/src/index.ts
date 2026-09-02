@@ -1,8 +1,13 @@
 import { collect } from '@pace-radar/collector-core';
+import type { BiliTransport } from '@pace-radar/collector-core';
 import { WorkerCollectorStore } from './store.js';
 
 export interface Env {
   DB: D1Database;
+}
+
+function createTransport(): BiliTransport {
+  return { fetch: (input, init) => fetch(input, init) };
 }
 
 export default {
@@ -12,7 +17,7 @@ export default {
       try {
         await collect(new WorkerCollectorStore(env.DB), {
           holder: `worker-${crypto.randomUUID()}`,
-          transport: { fetch: (input, init) => fetch(input, init) },
+          transport: createTransport(),
         });
         return new Response('collected', { headers: { 'Content-Type': 'text/plain' } });
       } catch (e) {
@@ -25,7 +30,7 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
     await collect(new WorkerCollectorStore(env.DB), {
       holder: `worker-${crypto.randomUUID()}`,
-      transport: { fetch: (input, init) => fetch(input, init) },
+      transport: createTransport(),
     });
   },
 };
