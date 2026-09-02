@@ -47,11 +47,19 @@ export function signWbiQuery(params: Record<string, string>, keys: WbiKeys): str
   return `${query}&w_rid=${wRid}`;
 }
 
+export function md5Hex(input: string): string {
+  return bytesToHex(md5(input));
+}
+
 export interface NavResponse {
   code: number;
   message?: string;
   data?: {
     isLogin?: boolean;
+    mid?: number;
+    uname?: string;
+    name?: string;
+    face?: string;
     wbi_img?: { img_url: string; sub_url: string };
   };
 }

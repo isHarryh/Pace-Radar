@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { BILI_API, BILI_HEADERS, DEFAULT_CONFIG, type PaceConfig } from '@pace-radar/shared';
+import { BILI_API, BILI_HEADERS, DEFAULT_CONFIG, md5Hex, type PaceConfig } from '@pace-radar/shared';
 import { listAccounts, requestLogs } from './db';
 
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
@@ -46,17 +46,41 @@ async function setConfigValue(db: D1Database, key: string, value: string): Promi
   await db.prepare('INSERT OR REPLACE INTO app_config (key, value) VALUES (?, ?)').bind(key, value).run();
 }
 
-async function checkCookieValidity(cookie: string): Promise<boolean | null> {
+async function getCookieState(cookie: string): Promise<{
+  valid: boolean | null;
+  identity: { isLogin: boolean; mid: number | null; uname: string | null } | null;
+  error: string | null;
+}> {
   try {
     const res = await fetch(`${BILI_API}/x/web-interface/nav`, {
       headers: { ...BILI_HEADERS, Cookie: cookie },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { code: number };
-    return body.code === 0;
-  } catch {
-    return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      if (text.includes('412') || text.includes('request was banned')) return { valid: null, identity: null, error: '风控拦截 412' };
+      return { valid: null, identity: null, error: `HTTP ${res.status}` };
+    }
+    const body = (await res.json()) as { code: number; message?: string; data?: { isLogin?: boolean; mid?: number; uname?: string; name?: string } };
+    if (body.code === 0) {
+      const d = body.data;
+      return {
+        valid: true,
+        identity: { isLogin: !!d?.isLogin, mid: d?.mid ?? null, uname: d?.uname ?? d?.name ?? null },
+        error: null,
+      };
+    }
+    if (body.code === -101) return { valid: false, identity: { isLogin: false, mid: null, uname: null }, error: '未登录 (-101)' };
+    return {
+      valid: false,
+      identity: { isLogin: false, mid: null, uname: null },
+      error: `B站返回 ${body.code}: ${body.message ?? '未知错误'}`,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes('412') || msg.includes('banned')) return { valid: null, identity: null, error: '风控拦截 412' };
+    if (msg.toLowerCase().includes('timeout')) return { valid: null, identity: null, error: '请求超时' };
+    return { valid: null, identity: null, error: msg };
   }
 }
 
@@ -173,14 +197,17 @@ admin.get('/cookie', async (c) => {
     updated_at: string;
   }>();
   const cookie = row?.value ?? '';
-  return c.json({
-    data: {
-      length: cookie.length,
-      masked: cookie ? `${cookie.slice(0, 40)}…` : '',
-      updatedAt: row?.updated_at ?? null,
-      valid: cookie ? await checkCookieValidity(cookie) : null,
-    },
-  });
+  const base = {
+    length: cookie.length,
+    masked: cookie ? `${cookie.slice(0, 40)}…` : '',
+    md5: cookie ? md5Hex(cookie) : null as string | null,
+    updatedAt: row?.updated_at ?? null,
+  };
+  if (!cookie) {
+    return c.json({ data: { ...base, valid: null as boolean | null, error: null as string | null, identity: null as null } });
+  }
+  const state = await getCookieState(cookie);
+  return c.json({ data: { ...base, ...state } });
 });
 
 admin.put('/cookie', async (c) => {

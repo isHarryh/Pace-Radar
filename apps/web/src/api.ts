@@ -126,8 +126,11 @@ export interface AdminConfig {
 export interface AdminCookieInfo {
   length: number;
   masked: string;
+  md5: string | null;
   updatedAt: string | null;
   valid: boolean | null;
+  error: string | null;
+  identity: { isLogin: boolean; mid: number | null; uname: string | null } | null;
 }
 
 export interface RequestLog {
