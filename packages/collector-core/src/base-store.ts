@@ -48,7 +48,7 @@ export abstract class BaseCollectorStore implements CollectorStore {
 
   async getScheduleStates(accountId: number): Promise<Map<string, ScheduleState>> {
     const targets = await this.queryAll<{ target_id: string }>(
-      `SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`,
+      `SELECT target_id FROM account_targets WHERE account_id = ?`,
       [accountId],
     );
     if (targets.length === 0) return new Map();
@@ -107,6 +107,14 @@ export abstract class BaseCollectorStore implements CollectorStore {
         snapshot.endpoint,
       ],
     );
+    if (snapshot.statusCode === 'ok' && snapshot.targetId) {
+      await this.exec(
+        `INSERT INTO account_targets (account_id, target_id, summary, first_seen_at, last_seen_at)
+         VALUES (?, ?, ?, datetime('now'), datetime('now'))
+         ON CONFLICT(account_id, target_id) DO UPDATE SET last_seen_at = excluded.last_seen_at, summary = COALESCE(excluded.summary, summary)`,
+        [snapshot.accountId, snapshot.targetId, snapshot.summary ?? null],
+      );
+    }
   }
 
   async insertSnapshots(snapshots: SnapshotInsert[]): Promise<void> {
@@ -130,6 +138,19 @@ export abstract class BaseCollectorStore implements CollectorStore {
         ],
       })),
     );
+    const okTargets = snapshots.filter((s) => s.statusCode === 'ok' && s.targetId);
+    if (okTargets.length > 0) {
+      const dedup = new Map<string, SnapshotInsert>();
+      for (const s of okTargets) dedup.set(`${s.accountId}:${s.targetId}`, s);
+      await this.batchExec(
+        Array.from(dedup.values()).map((s) => ({
+          sql: `INSERT INTO account_targets (account_id, target_id, summary, first_seen_at, last_seen_at)
+                VALUES (?, ?, ?, datetime('now'), datetime('now'))
+                ON CONFLICT(account_id, target_id) DO UPDATE SET last_seen_at = excluded.last_seen_at, summary = COALESCE(excluded.summary, summary)`,
+          params: [s.accountId, s.targetId, s.summary ?? null],
+        })),
+      );
+    }
   }
 
   private toDbTime(date: Date): string {

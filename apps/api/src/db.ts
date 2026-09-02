@@ -130,6 +130,28 @@ export async function requestLogs(db: D1Database, limit: number): Promise<Reques
 
 // ---------- Multi-target helpers for full-page tracking ----------
 
+export async function getSummaries(
+  db: D1Database,
+  accountId: number,
+  targetIds: string[],
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  for (const tid of targetIds) map.set(tid, null);
+  if (targetIds.length === 0) return map;
+  const chunkSize = 5;
+  for (let i = 0; i < targetIds.length; i += chunkSize) {
+    const chunk = targetIds.slice(i, i + chunkSize);
+    const ph = placeholders(chunk);
+    const sql = `SELECT target_id, summary FROM account_targets WHERE account_id = ? AND target_id IN (${ph})`;
+    const { results } = await db
+      .prepare(sql)
+      .bind(accountId, ...chunk)
+      .all<{ target_id: string; summary: string | null }>();
+    for (const row of results) map.set(row.target_id, row.summary);
+  }
+  return map;
+}
+
 export async function getActiveTargetIds(db: D1Database, accountId: number, threshold: number): Promise<string[]> {
   const map = await getActiveTargetsBatch(db, [{ id: accountId, threshold } as PublicAccountRow]);
   return map.get(accountId) ?? [];
@@ -172,7 +194,7 @@ export async function getActiveTargetsBatch(
   await Promise.all(
     accounts.map(async (account) => {
       const distinct = await db
-        .prepare(`SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`)
+        .prepare(`SELECT target_id FROM account_targets WHERE account_id = ?`)
         .bind(account.id)
         .all<{ target_id: string }>();
       const targetIds = distinct.results.map((r) => r.target_id);
@@ -271,7 +293,7 @@ export async function fallbackLatestStats(
   accountId: number,
 ): Promise<{ maxComment: number | null; maxRatio: number | null; latest: SnapshotRow | null }> {
   const distinct = await db
-    .prepare(`SELECT target_id FROM snapshots WHERE account_id = ? AND status_code = 'ok' GROUP BY target_id`)
+    .prepare(`SELECT target_id FROM account_targets WHERE account_id = ?`)
     .bind(accountId)
     .all<{ target_id: string }>();
   const targetIds = distinct.results.map((r) => r.target_id);

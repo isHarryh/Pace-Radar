@@ -38,6 +38,7 @@ export interface AccountView {
 export interface TargetView {
   targetId: string;
   url: string;
+  summary: string | null;
   commentCount: number;
   likeCount: number;
   shareCount: number;
@@ -55,6 +56,7 @@ export interface SeriesPoint {
 export interface SeriesGroup {
   targetId: string;
   url: string;
+  summary: string | null;
   points: SeriesPoint[];
 }
 

@@ -8,6 +8,7 @@ import {
   getActiveTargetIds,
   getActiveTargetsBatch,
   getRecentRatiosByTargets,
+  getSummaries,
   latestSnapshots,
   latestSnapshotsByTargets,
   listPublicAccounts,
@@ -52,6 +53,7 @@ interface AccountView {
 interface TargetView {
   targetId: string;
   url: string;
+  summary: string | null;
   commentCount: number;
   likeCount: number;
   shareCount: number;
@@ -118,11 +120,18 @@ function targetUrl(targetId: string): string {
   return `https://t.bilibili.com/${targetId}`;
 }
 
-function toTargetView(targetId: string, ratios: number[], rows: SnapshotRow[], threshold: number): TargetView {
+function toTargetView(
+  targetId: string,
+  ratios: number[],
+  rows: SnapshotRow[],
+  threshold: number,
+  summary: string | null = null,
+): TargetView {
   const latest = toLatestView(rows);
   return {
     targetId,
     url: targetUrl(targetId),
+    summary,
     commentCount: latest?.commentCount ?? 0,
     likeCount: latest?.likeCount ?? 0,
     shareCount: latest?.shareCount ?? 0,
@@ -139,11 +148,14 @@ async function fetchActiveTargetViews(
   activeIds: string[],
 ): Promise<TargetView[]> {
   if (activeIds.length === 0) return [];
-  const [snapshotsMap, ratiosMap] = await Promise.all([
+  const [snapshotsMap, ratiosMap, summaryMap] = await Promise.all([
     latestSnapshotsByTargets(db, account.id, activeIds, 2),
     getRecentRatiosByTargets(db, account.id, activeIds),
+    getSummaries(db, account.id, activeIds),
   ]);
-  return activeIds.map((tid) => toTargetView(tid, ratiosMap.get(tid) ?? [], snapshotsMap.get(tid) ?? [], account.threshold));
+  return activeIds.map((tid) =>
+    toTargetView(tid, ratiosMap.get(tid) ?? [], snapshotsMap.get(tid) ?? [], account.threshold, summaryMap.get(tid) ?? null),
+  );
 }
 
 async function buildAggregatedAccountView(
@@ -350,12 +362,21 @@ app.get('/api/accounts/:mid/series', async (c) => {
   return handleAccountRoute(c, async (account) => {
     const activeIds = await getActiveTargetIds((c as unknown as { env: Env }).env.DB, account.id, account.threshold);
     if (activeIds.length === 0) {
-      return { range: params.range, resolution: params.resolution, series: [] as { targetId: string; url: string; points: { t: string; growth: number }[] }[] };
+      return {
+        range: params.range,
+        resolution: params.resolution,
+        series: [] as { targetId: string; url: string; summary: string | null; points: { t: string; growth: number }[] }[],
+      };
     }
-    const seriesMap = await seriesByTargets((c as unknown as { env: Env }).env.DB, account.id, activeIds, params.bucket, params.offset);
+    const db = (c as unknown as { env: Env }).env.DB;
+    const [seriesMap, summaryMap] = await Promise.all([
+      seriesByTargets(db, account.id, activeIds, params.bucket, params.offset),
+      getSummaries(db, account.id, activeIds),
+    ]);
     const series = activeIds.map((tid) => ({
       targetId: tid,
       url: targetUrl(tid),
+      summary: summaryMap.get(tid) ?? null,
       points: toGrowthPoints(seriesMap.get(tid) ?? []),
     }));
     return { range: params.range, resolution: params.resolution, series };

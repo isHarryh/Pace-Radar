@@ -24,6 +24,37 @@ function keysFromNav(nav: NavResponse): WbiKeys {
   return { imgKey: keyOf(img.img_url), subKey: keyOf(img.sub_url), fetchedAt: new Date().toISOString() };
 }
 
+function extractSummary(item: import('@pace-radar/shared').FeedSpaceItem): string | null {
+  const dyn = item.modules?.module_dynamic as Record<string, unknown> | undefined;
+  if (!dyn) return null;
+  const desc = (dyn as { desc?: { text?: string } }).desc?.text?.trim();
+  if (desc) return desc.slice(0, 200);
+  const major = (dyn as { major?: Record<string, unknown> }).major as Record<string, unknown> | undefined;
+  if (!major) return null;
+  const opus = major.opus as { title?: string; summary?: { text?: string } } | undefined;
+  if (opus?.title?.trim()) return String(opus.title).trim().slice(0, 200);
+  if (opus?.summary?.text?.trim()) return String(opus.summary.text).trim().slice(0, 200);
+  const archive = major.archive as { title?: string; desc?: string } | undefined;
+  if (archive?.title?.trim()) return String(archive.title).trim().slice(0, 200);
+  if (archive?.desc?.trim()) return String(archive.desc).trim().slice(0, 200);
+  const article = major.article as { title?: string } | undefined;
+  if (article?.title?.trim()) return String(article.title).trim().slice(0, 200);
+  const common = major.common as { title?: string } | undefined;
+  if (common?.title?.trim()) return String(common.title).trim().slice(0, 200);
+  const live = major.live as { title?: string; desc?: { text?: string } } | undefined;
+  if (live?.title?.trim()) return String(live.title).trim().slice(0, 200);
+  if (live?.desc?.text?.trim()) return String(live.desc.text).trim().slice(0, 200);
+  for (const v of Object.values(major)) {
+    if (v && typeof v === 'object') {
+      const t = (v as { title?: string }).title;
+      if (typeof t === 'string' && t.trim()) return t.trim().slice(0, 200);
+      const d = (v as { desc?: string }).desc ?? (v as { text?: string }).text;
+      if (typeof d === 'string' && d.trim()) return d.trim().slice(0, 200);
+    }
+  }
+  return null;
+}
+
 function isBlocked(text: string): boolean {
   return text.includes('412') || text.includes('412.js') || text.includes('request was banned');
 }
@@ -107,6 +138,7 @@ export function createBiliClient(transport: BiliTransport): BiliClient {
           commentCount: stat.comment.count,
           likeCount: stat.like.count,
           shareCount: stat.forward.count,
+          summary: extractSummary(item),
         };
       });
     },

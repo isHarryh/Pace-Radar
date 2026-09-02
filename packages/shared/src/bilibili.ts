@@ -65,7 +65,20 @@ export interface FeedSpaceStat {
 export interface FeedSpaceItem {
   id_str: string;
   type: string;
-  modules: { module_stat: FeedSpaceStat };
+  modules: {
+    module_stat: FeedSpaceStat;
+    module_dynamic?: {
+      desc?: { text?: string };
+      major?: {
+        opus?: { title?: string; summary?: { text?: string } };
+        archive?: { title?: string; desc?: string };
+        article?: { title?: string };
+        draw?: unknown;
+        common?: { title?: string };
+        live?: { title?: string; desc?: { text?: string } };
+      } & Record<string, unknown>;
+    };
+  };
 }
 
 export interface FeedSpaceResponse {

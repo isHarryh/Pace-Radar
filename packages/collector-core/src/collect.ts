@@ -136,6 +136,7 @@ export async function collect(store: CollectorStore, options: CollectOptions): P
             commentCount: s.commentCount,
             likeCount: s.likeCount,
             shareCount: s.shareCount,
+            summary: s.summary,
           }));
         if (inserts.length > 0) await store.insertSnapshots(inserts);
       } catch (error) {

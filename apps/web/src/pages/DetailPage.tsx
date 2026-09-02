@@ -25,6 +25,12 @@ function shortId(id: string): string {
   return id.length > 8 ? `${id.slice(0, 4)}…${id.slice(-4)}` : id;
 }
 
+function displayLabel(targetId: string, summary: string | null): string {
+  const s = summary?.trim();
+  if (s) return s.slice(0, 6);
+  return shortId(targetId);
+}
+
 function buildMultiOption(groups: SeriesGroup[], range: Range): EChartsOption {
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
   if (groups.length === 0) {
@@ -40,6 +46,25 @@ function buildMultiOption(groups: SeriesGroup[], range: Range): EChartsOption {
   const times = Array.from(timeSet).sort();
   const timeIndex = new Map(times.map((t, i) => [t, i] as const));
 
+  const labelCounts = new Map<string, number>();
+  for (const g of groups) {
+    const label = displayLabel(g.targetId, g.summary);
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  }
+  const labelSeen = new Map<string, number>();
+  const idToLabel = new Map<string, string>();
+  for (const g of groups) {
+    const base = displayLabel(g.targetId, g.summary);
+    const count = labelCounts.get(base) ?? 0;
+    let label = base;
+    if (count > 1) {
+      const seen = labelSeen.get(base) ?? 0;
+      labelSeen.set(base, seen + 1);
+      label = seen === 0 ? base : `${base}·${shortId(g.targetId).slice(-2)}`;
+    }
+    idToLabel.set(g.targetId, label);
+  }
+
   const series = groups.map((g) => {
     const color = colorForTarget(g.targetId);
     const data: (number | null)[] = Array(times.length).fill(null);
@@ -50,7 +75,7 @@ function buildMultiOption(groups: SeriesGroup[], range: Range): EChartsOption {
     }
     return {
       type: 'line' as const,
-      name: shortId(g.targetId),
+      name: idToLabel.get(g.targetId) ?? shortId(g.targetId),
       data,
       symbol: 'none',
       connectNulls: true,
@@ -92,7 +117,7 @@ function buildMultiOption(groups: SeriesGroup[], range: Range): EChartsOption {
       pageIconColor: '#c2c6cc',
       pageIconInactiveColor: '#e5e8ec',
       pageTextStyle: { color: '#9499a0', fontSize: 10 },
-      data: groups.map((g) => shortId(g.targetId)),
+      data: Array.from(idToLabel.values()),
       textStyle: { fontSize: 10, color: '#606770' },
     },
     xAxis: {
@@ -154,14 +179,19 @@ function TargetTable({ targets }: { targets: TargetView[] }) {
           </tr>
         </thead>
         <tbody>
-          {targets.map((t) => (
-            <tr key={t.targetId} className="border-b border-line/50 last:border-0">
-              <td className="px-2 py-2">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colorForTarget(t.targetId) }} />
-                  <span className="font-mono text-xs text-ink">{shortId(t.targetId)}</span>
-                </span>
-              </td>
+          {targets.map((t) => {
+            const label = displayLabel(t.targetId, t.summary);
+            const full = t.summary?.trim() ? t.summary.trim() : t.targetId;
+            return (
+              <tr key={t.targetId} className="border-b border-line/50 last:border-0">
+                <td className="px-2 py-2">
+                  <span className="inline-flex max-w-[14ch] items-center gap-1.5 sm:max-w-[18ch]" title={full}>
+                    <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorForTarget(t.targetId) }} />
+                    <span className="truncate font-mono text-xs text-ink" title={full}>
+                      {label}
+                    </span>
+                  </span>
+                </td>
               <td className="px-2 py-2 text-right font-medium text-ink">{formatCountWan(t.commentCount)}</td>
               <td className="px-2 py-2 text-right text-ink">{t.perMinute ? `${t.perMinute.comments.toFixed(1)}/分` : '—'}</td>
               <td className="px-2 py-2 text-right text-ink">{formatCountWan(t.likeCount)}</td>
@@ -180,7 +210,8 @@ function TargetTable({ targets }: { targets: TargetView[] }) {
                 </a>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>

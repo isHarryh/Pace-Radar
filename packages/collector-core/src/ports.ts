@@ -20,6 +20,7 @@ export interface SnapshotInsert {
   commentCount: number;
   likeCount: number;
   shareCount: number;
+  summary?: string | null;
 }
 
 export interface CollectorStore {
@@ -51,4 +52,5 @@ export interface FreshStat {
   commentCount: number;
   likeCount: number;
   shareCount: number;
+  summary: string | null;
 }
