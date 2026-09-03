@@ -78,7 +78,7 @@ export async function recentRatios(db: D1Database, accountId: number, targetId: 
   const tid = targetId ?? (await currentTargetId(db, accountId));
   const where = tid ? 'AND target_id = ?' : '';
   const params = tid ? [accountId, tid] : [accountId];
-  const sql = `SELECT ratio_c_l FROM snapshots WHERE account_id = ? ${where} AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 10`;
+  const sql = `SELECT ratio_c_l FROM snapshots WHERE account_id = ? ${where} AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 5`;
   const { results } = await db.prepare(sql).bind(...params).all<{ ratio_c_l: number }>();
   return results.map((r) => r.ratio_c_l).reverse();
 }
@@ -173,7 +173,7 @@ export async function getRecentRatiosByTargets(
     const params: unknown[] = [];
     for (const tid of chunk) {
       parts.push(
-        `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 10)`,
+        `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 5)`,
       );
       params.push(accountId, tid);
     }
@@ -207,9 +207,9 @@ export async function getActiveTargetsBatch(
         const parts: string[] = [];
         const params: unknown[] = [];
         for (const tid of chunk) {
-          parts.push(
-            `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 10)`,
-          );
+        parts.push(
+          `SELECT * FROM (SELECT target_id, ratio_c_l FROM snapshots WHERE account_id = ? AND target_id = ? AND status_code = 'ok' ORDER BY updated_at DESC, id DESC LIMIT 5)`,
+        );
           params.push(account.id, tid);
         }
         const sql = parts.join(' UNION ALL ');

@@ -1,4 +1,4 @@
-export type PaceStatus = 'normal' | 'watching' | 'active';
+export type PaceStatus = 'normal' | 'pacing';
 
 export type TargetType = 'dynamic';
 

@@ -195,7 +195,6 @@ async function buildAggregatedAccountView(
   let maxRatio: number | null = null;
   let totalGrowthValue = 0;
   let hasGrowth = false;
-  let overallStatus: PaceStatus = 'normal';
   let latestForView: AccountView['latest'] = null;
   let maxCommentTarget: TargetView | null = null;
   for (const tv of targetViews) {
@@ -208,8 +207,6 @@ async function buildAggregatedAccountView(
       totalGrowthValue += tv.perMinute.comments;
       hasGrowth = true;
     }
-    if (tv.status === 'active') overallStatus = 'active';
-    else if (tv.status === 'watching' && overallStatus !== 'active') overallStatus = 'watching';
   }
   if (maxCommentTarget) {
     latestForView = {
@@ -225,7 +222,7 @@ async function buildAggregatedAccountView(
     mid: account.mid,
     name: account.name,
     threshold: account.threshold,
-    status: overallStatus,
+    status: 'pacing' as PaceStatus,
     activeCount: activeIds.length,
     maxComment,
     maxRatio,

@@ -33,7 +33,7 @@ export abstract class BaseCollectorStore implements CollectorStore {
          COALESCE((SELECT json_group_array(ratio_c_l) FROM (
            SELECT ratio_c_l FROM snapshots WHERE account_id = ? AND status_code = 'ok'
              AND target_id = (SELECT target_id FROM target)
-           ORDER BY updated_at DESC, id DESC LIMIT 10
+           ORDER BY updated_at DESC, id DESC LIMIT 5
          )), '[]') AS ratios,
          (SELECT MAX(updated_at) FROM snapshots WHERE account_id = ? AND status_code = 'ok'
            AND target_id = (SELECT target_id FROM target)) AS last_collected_at`,
@@ -60,7 +60,7 @@ export abstract class BaseCollectorStore implements CollectorStore {
       const unionParams: unknown[] = [];
       for (const { target_id } of chunk) {
         unionParts.push(
-          `SELECT * FROM (SELECT target_id, ratio_c_l, updated_at FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id = ? ORDER BY updated_at DESC, id DESC LIMIT 10)`,
+          `SELECT * FROM (SELECT target_id, ratio_c_l, updated_at FROM snapshots WHERE account_id = ? AND status_code = 'ok' AND target_id = ? ORDER BY updated_at DESC, id DESC LIMIT 5)`,
         );
         unionParams.push(accountId, target_id);
       }
